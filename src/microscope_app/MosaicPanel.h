@@ -25,6 +25,7 @@ public:
     void setCncPosition(double xMm, double yMm);
     void setStageCircles(const QVector<std::tuple<double, double, double>> &circlesMm);
     QPixmap createPreview(const QSize &size) const;
+    MosaicWidget *displayWidget() const;
 
 signals:
     void requestMove(double x, double y);

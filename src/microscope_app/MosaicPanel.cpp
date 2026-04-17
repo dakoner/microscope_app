@@ -85,6 +85,11 @@ void MosaicPanel::setStageCircles(const QVector<std::tuple<double, double, doubl
     m_displayWidget->setOverlayCircles(px);
 }
 
+MosaicWidget *MosaicPanel::displayWidget() const
+{
+    return m_displayWidget;
+}
+
 void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double cncYMm)
 {
     if (m_calibrationPxPerMm <= 0 || cameraFrame.isNull()) return;

@@ -97,6 +97,11 @@ MainWindow::MainWindow(QWidget *parent)
     m_actionRuler = ui->m_actionRuler;
     m_actionColorPicker = ui->m_actionColorPicker;
 
+    // Camera is started automatically; hide manual camera/home actions from UI.
+    m_actionStartCamera->setVisible(false);
+    m_actionStopCamera->setVisible(false);
+    m_actionHomeAndRun->setVisible(false);
+
     // Post-setup customization
     m_videoLabel->installEventFilter(this);
     m_videoLabel->setFocusPolicy(Qt::StrongFocus);
@@ -112,6 +117,10 @@ MainWindow::MainWindow(QWidget *parent)
     // FPS label (added to status bar at runtime)
     m_fpsLabel = new QLabel("FPS: 0.0");
     statusBar()->addPermanentWidget(m_fpsLabel);
+    m_framesReceivedLabel = new QLabel("Camera Frames: 0");
+    statusBar()->addPermanentWidget(m_framesReceivedLabel);
+    m_framesMosaicLabel = new QLabel("Mosaic Frames: 0");
+    statusBar()->addPermanentWidget(m_framesMosaicLabel);
 
     // LED Controller (replaces ledPlaceholder in .ui)
     m_ledController = new LEDController(this);
@@ -132,17 +141,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_mosaicPipLabel->setScaledContents(true);
     m_mosaicPipLabel->setAlignment(Qt::AlignCenter);
 
+    setWindowState(windowState() | Qt::WindowMaximized);
+
     // Defer initial positioning until after the layout pass gives containers their real sizes
-    QTimer::singleShot(0, this, [this]() {
-        if (m_videoPipLabel && m_mosaicTabContainer) {
-            m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
-            m_videoPipLabel->raise();
-        }
-        if (m_mosaicPipLabel && m_centerTabs->widget(0)) {
-            m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
-            m_mosaicPipLabel->raise();
-        }
-    });
+    QTimer::singleShot(0, this, &MainWindow::repositionPipOverlays);
 
     connectSignals();
 
@@ -156,16 +158,16 @@ MainWindow::MainWindow(QWidget *parent)
     // Camera frame signal – connect to frameReady
     connect(m_camera, &MindVisionCamera::frameReady, this,
             [this](QImage image, qint64 /*ts*/) {
+        ++m_framesReceivedCount;
+        updateFrameStatsLabel();
+
         // Recording
         if (m_videoThread->isRunning())
             m_videoThread->addFrame(image);
 
-        // Throttle to ~30 FPS
-        double now = nowSec();
-        if (now - m_lastUiUpdateTime > 0.033) {
-            m_lastUiUpdateTime = now;
-            updateFrame(std::move(image));
-        }
+        // Temporarily unthrottled: process every frame.
+        m_lastUiUpdateTime = nowSec();
+        updateFrame(std::move(image));
     });
 
     // Param poll timer
@@ -195,7 +197,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     log("Application started.");
 
-    QTimer::singleShot(0, this, &MainWindow::loadSettings);
+    QTimer::singleShot(0, this, [this]() {
+        loadSettings();
+        onStartClicked();
+    });
 }
 
 MainWindow::~MainWindow()
@@ -250,16 +255,7 @@ void MainWindow::connectSignals()
 
     // PiP repositioning on tab change
     connect(m_centerTabs, &QTabWidget::currentChanged, this, [this](int) {
-        QTimer::singleShot(100, this, [this]() {
-            if (m_mosaicPipLabel && m_centerTabs->widget(0)) {
-                m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
-                m_mosaicPipLabel->raise();
-            }
-            if (m_videoPipLabel && m_mosaicTabContainer) {
-                m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
-                m_videoPipLabel->raise();
-            }
-        });
+        QTimer::singleShot(100, this, &MainWindow::repositionPipOverlays);
     });
 
     // Install event filters for resize handling
@@ -282,6 +278,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
     m_ledController->stop();
 
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    repositionPipOverlays();
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
@@ -330,22 +332,27 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                     updateColorPicker(pos);
             }
         }
+    } else if (m_mosaicPanel && watched == m_mosaicPanel->displayWidget()) {
+        if (event->type() == QEvent::KeyPress) {
+            keyPressEvent(static_cast<QKeyEvent *>(event));
+            return true;
+        }
     } else if (watched == m_mosaicTabContainer && event->type() == QEvent::Resize) {
-        if (m_videoPipLabel) {
-            m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
-            m_videoPipLabel->raise();
-        }
+        repositionPipOverlays();
     } else if (m_centerTabs && watched == m_centerTabs->widget(0) && event->type() == QEvent::Resize) {
-        if (m_mosaicPipLabel) {
-            m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
-            m_mosaicPipLabel->raise();
-        }
+        repositionPipOverlays();
     }
     return QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab) {
+        toggleCenterViewTab();
+        event->accept();
+        return;
+    }
+
     if (m_cncControlPanel) {
         switch (event->key()) {
         case Qt::Key_Left:  m_cncControlPanel->moveLeft();    return;
@@ -358,6 +365,40 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         }
     }
     QMainWindow::keyPressEvent(event);
+}
+
+void MainWindow::toggleCenterViewTab()
+{
+    if (!m_centerTabs || m_centerTabs->count() < 2)
+        return;
+
+    int nextIndex = (m_centerTabs->currentIndex() + 1) % 2;
+    m_centerTabs->setCurrentIndex(nextIndex);
+
+    if (nextIndex == 0) {
+        if (m_videoLabel)
+            m_videoLabel->setFocus();
+    } else if (m_mosaicPanel && m_mosaicPanel->displayWidget()) {
+        m_mosaicPanel->displayWidget()->setFocus();
+    }
+}
+
+void MainWindow::repositionPipOverlays()
+{
+    constexpr int margin = 10;
+
+    if (m_videoPipLabel && m_mosaicTabContainer) {
+        int x = std::max(margin, m_mosaicTabContainer->width() - m_videoPipLabel->width() - margin);
+        m_videoPipLabel->move(x, margin);
+        m_videoPipLabel->raise();
+    }
+
+    if (m_mosaicPipLabel && m_centerTabs && m_centerTabs->widget(0)) {
+        QWidget *videoTabWidget = m_centerTabs->widget(0);
+        int x = std::max(margin, videoTabWidget->width() - m_mosaicPipLabel->width() - margin);
+        m_mosaicPipLabel->move(x, margin);
+        m_mosaicPipLabel->raise();
+    }
 }
 
 // ---------- Video Display ----------
@@ -423,6 +464,10 @@ void MainWindow::onStartClicked()
 {
     if (m_camera->open()) {
         if (m_camera->start()) {
+            m_framesReceivedCount = 0;
+            m_framesWrittenToMosaicCount = 0;
+            updateFrameStatsLabel();
+
             m_isCameraRunning = true;
             m_actionStartCamera->setEnabled(false);
             m_actionStopCamera->setEnabled(true);
@@ -463,6 +508,7 @@ void MainWindow::onStopClicked()
     m_videoLabel->clear();
     m_videoLabel->setText("Camera Stopped");
     m_fpsLabel->setText("FPS: 0.0");
+    updateFrameStatsLabel();
     log("Camera stopped.");
 }
 
@@ -539,20 +585,29 @@ void MainWindow::updateFrame(QImage image)
         updateIntensityProfile(m_rulerStart, end, &image);
     }
 
-    // Mosaic update (throttle to ~5 FPS)
+    // Mosaic update (temporarily unthrottled)
     if (m_mosaicPanel && m_cncState != "Home") {
-        double now2 = nowSec();
-        if (now2 - m_lastMosaicUpdateTime > 0.2) {
-            m_lastMosaicUpdateTime = now2;
-            m_mosaicPanel->updateMosaic(image, m_currentCncXMm, m_currentCncYMm);
-            
-            if (m_mosaicPipLabel) {
-                QPixmap mosaicPixmap = m_mosaicPanel->createPreview(m_mosaicPipLabel->size());
-                if (!mosaicPixmap.isNull()) {
-                    m_mosaicPipLabel->setPixmap(mosaicPixmap);
-                }
+        m_lastMosaicUpdateTime = nowSec();
+        m_mosaicPanel->updateMosaic(image, m_currentCncXMm, m_currentCncYMm);
+        ++m_framesWrittenToMosaicCount;
+        updateFrameStatsLabel();
+
+        if (m_mosaicPipLabel) {
+            QPixmap mosaicPixmap = m_mosaicPanel->createPreview(m_mosaicPipLabel->size());
+            if (!mosaicPixmap.isNull()) {
+                m_mosaicPipLabel->setPixmap(mosaicPixmap);
             }
         }
+    }
+}
+
+void MainWindow::updateFrameStatsLabel()
+{
+    if (m_framesReceivedLabel) {
+        m_framesReceivedLabel->setText(QString("Camera Frames: %1").arg(m_framesReceivedCount));
+    }
+    if (m_framesMosaicLabel) {
+        m_framesMosaicLabel->setText(QString("Mosaic Frames: %1").arg(m_framesWrittenToMosaicCount));
     }
 }
 
@@ -924,6 +979,20 @@ void MainWindow::initMosaicPanel(bool forceRecreate)
     m_mosaicPanel = new MosaicPanel(stageW, stageH, m_rulerCalibration);
     connect(m_mosaicPanel, &MosaicPanel::requestMove, this, &MainWindow::onMosaicMoveRequested);
     connect(m_mosaicPanel, &MosaicPanel::requestScan, this, &MainWindow::onMosaicScanRequested);
+    connect(m_mosaicPanel, &MosaicPanel::selectionsChanged, this,
+            [this](const QVector<QRectF> &areas) {
+                if (!m_scanPanel)
+                    return;
+                m_scanPanel->updateScanAreas(areas);
+                if (areas.isEmpty())
+                    log("Scan areas cleared.");
+            });
+    if (m_mosaicPanel->displayWidget()) {
+        m_mosaicPanel->displayWidget()->installEventFilter(this);
+        m_mosaicPanel->displayWidget()->setFocusPolicy(Qt::StrongFocus);
+        connect(m_mosaicPanel->displayWidget(), &MosaicWidget::toggleViewRequested,
+                this, &MainWindow::toggleCenterViewTab);
+    }
 
     layout->addWidget(m_mosaicPanel, 1);
 
@@ -962,12 +1031,11 @@ void MainWindow::onMosaicScanRequested(double xMin, double yMin, double xMax, do
     if (m_rulerCalibration <= 0) { log("Scan Error: Ruler not calibrated."); return; }
     if (m_currentPixmap.isNull()) { log("Scan Error: No camera image."); return; }
 
-    if (m_scanPanel) {
-        QVector<QRectF> areas;
-        areas.append(QRectF(xMin, yMin, xMax - xMin, yMax - yMin));
-        m_scanPanel->updateScanAreas(areas);
-        log("Scan area selected. Configure and start scan in the 'Stage Control' panel.");
-    }
+    Q_UNUSED(xMin);
+    Q_UNUSED(yMin);
+    Q_UNUSED(xMax);
+    Q_UNUSED(yMax);
+    log("Scan area selected. Configure and start scan in the 'Stage Control' panel.");
 }
 
 void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,

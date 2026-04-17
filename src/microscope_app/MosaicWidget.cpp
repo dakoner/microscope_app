@@ -2,6 +2,7 @@
 #include <QPainter>
 #include <QMouseEvent>
 #include <QKeyEvent>
+#include <QWheelEvent>
 #include <cmath>
 
 MosaicWidget::MosaicWidget(QWidget *parent)
@@ -317,7 +318,10 @@ void MosaicWidget::keyPressEvent(QKeyEvent *event)
         QWidget::keyPressEvent(event);
         return;
     }
-    if (event->key() == Qt::Key_PageUp) {
+    if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab) {
+        emit toggleViewRequested();
+        event->accept();
+    } else if (event->key() == Qt::Key_PageUp) {
         doZoom(1);
         event->accept();
     } else if (event->key() == Qt::Key_PageDown) {
@@ -326,6 +330,28 @@ void MosaicWidget::keyPressEvent(QKeyEvent *event)
     } else {
         QWidget::keyPressEvent(event);
     }
+}
+
+void MosaicWidget::wheelEvent(QWheelEvent *event)
+{
+    if (m_totalWidth == 0) {
+        QWidget::wheelEvent(event);
+        return;
+    }
+
+    int deltaY = event->angleDelta().y();
+    if (deltaY == 0) {
+        QWidget::wheelEvent(event);
+        return;
+    }
+
+    int direction = (deltaY > 0) ? 1 : -1;
+    int steps = std::max(1, std::abs(deltaY) / 120);
+    for (int i = 0; i < steps; ++i) {
+        doZoom(direction, event->position());
+    }
+
+    event->accept();
 }
 
 void MosaicWidget::paintEvent(QPaintEvent *)

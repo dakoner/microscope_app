@@ -20,6 +20,7 @@
 #include <QPixmap>
 #include <QPointF>
 #include <QImage>
+#include <cstdint>
 
 namespace Ui { class MainWindow; }
 
@@ -41,6 +42,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -104,9 +106,12 @@ private slots:
 
 private:
     void connectSignals();
+    void toggleCenterViewTab();
+    void repositionPipOverlays();
     void syncUi();
     void updateSliderFromTime(double current, double minVal, double maxVal);
     void refreshVideoLabel();
+    void updateFrameStatsLabel();
     QPointF getImageCoords(const QPointF &mousePos);
     void updateRulerStats();
     void updateIntensityProfile(QPointF p1, QPointF p2, const QImage *image = nullptr);
@@ -125,6 +130,8 @@ private:
     double m_currentFps = 30.0;
     double m_lastUiUpdateTime = 0.0;
     double m_lastMosaicUpdateTime = 0.0;
+    std::uint64_t m_framesReceivedCount = 0;
+    std::uint64_t m_framesWrittenToMosaicCount = 0;
     QPixmap m_currentPixmap;
     QImage m_currentImage;
     QSize m_lastVideoLabelSize;
@@ -183,6 +190,8 @@ private:
 
     // Status bar
     QLabel *m_fpsLabel = nullptr;
+    QLabel *m_framesReceivedLabel = nullptr;
+    QLabel *m_framesMosaicLabel = nullptr;
 
     // Log
     QPlainTextEdit *m_logTextEdit = nullptr;

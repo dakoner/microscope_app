@@ -36,12 +36,14 @@ signals:
     void selectionsChanged(const QVector<QRectF> &rects);
     void mouseMoved(double imgX, double imgY);
     void selectionMade(double x, double y, double w, double h);
+    void toggleViewRequested();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
