@@ -119,6 +119,21 @@ MainWindow::MainWindow(QWidget *parent)
     ui->hardwareTabs->removeTab(ledIdx);
     ui->hardwareTabs->insertTab(ledIdx, m_ledController->widget(), "LED");
 
+    // Create picture-in-picture labels
+    m_videoPipLabel = new QLabel(m_mosaicTabContainer);
+    m_videoPipLabel->setFixedSize(240, 180);
+    m_videoPipLabel->setStyleSheet("border: 2px solid #888; background-color: black;");
+    m_videoPipLabel->setScaledContents(true);
+    m_videoPipLabel->setAlignment(Qt::AlignCenter);
+    m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
+
+    m_mosaicPipLabel = new QLabel(m_centerTabs->widget(0));
+    m_mosaicPipLabel->setFixedSize(240, 180);
+    m_mosaicPipLabel->setStyleSheet("border: 2px solid #888; background-color: black;");
+    m_mosaicPipLabel->setScaledContents(true);
+    m_mosaicPipLabel->setAlignment(Qt::AlignCenter);
+    m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
+
     connectSignals();
 
     // Camera & video
@@ -222,6 +237,25 @@ void MainWindow::connectSignals()
     // Ruler
     connect(m_btnRulerCalibrate, &QPushButton::clicked, this, &MainWindow::calibrateRuler);
     connect(m_chkShowProfile, &QCheckBox::toggled, this, &MainWindow::onShowProfileToggled);
+
+    // PiP repositioning on tab change
+    connect(m_centerTabs, &QTabWidget::currentChanged, this, [this](int) {
+        QTimer::singleShot(100, this, [this]() {
+            if (m_mosaicPipLabel && m_centerTabs->widget(0)) {
+                m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
+            }
+            if (m_videoPipLabel && m_mosaicTabContainer) {
+                m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
+            }
+        });
+    });
+
+    // Install event filters for resize handling
+    m_mosaicTabContainer->installEventFilter(this);
+    auto *videoTabWidget = m_centerTabs->widget(0);
+    if (videoTabWidget) {
+        videoTabWidget->installEventFilter(this);
+    }
 }
 
 // ---------- Close / Event Filter ----------
@@ -284,6 +318,16 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                     updateColorPicker(pos);
             }
         }
+    } else if (watched == m_mosaicTabContainer && event->type() == QEvent::Resize) {
+        // Reposition video PiP label when mosaic tab is resized
+        if (m_videoPipLabel) {
+            m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
+        }
+    } else if (m_centerTabs && watched == m_centerTabs->widget(0) && event->type() == QEvent::Resize) {
+        // Reposition mosaic PiP label when video tab is resized
+        if (m_mosaicPipLabel) {
+            m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
+        }
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -329,6 +373,11 @@ void MainWindow::refreshVideoLabel()
         m_videoLabel->setPixmap(m_currentPixmap.scaled(labelSize, Qt::KeepAspectRatio, Qt::FastTransformation));
     }
     m_lastVideoLabelSize = labelSize;
+
+    // Update PiP video label in mosaic tab
+    if (m_videoPipLabel && !m_currentPixmap.isNull()) {
+        m_videoPipLabel->setPixmap(m_currentPixmap.scaled(m_videoPipLabel->size(), Qt::KeepAspectRatio, Qt::FastTransformation));
+    }
 }
 
 QPointF MainWindow::getImageCoords(const QPointF &mousePos)
@@ -482,6 +531,14 @@ void MainWindow::updateFrame(QImage image)
         if (now2 - m_lastMosaicUpdateTime > 0.2) {
             m_lastMosaicUpdateTime = now2;
             m_mosaicPanel->updateMosaic(image, m_currentCncXMm, m_currentCncYMm);
+            
+            // Update PiP mosaic label in video tab
+            if (m_mosaicPipLabel) {
+                QPixmap mosaicPixmap = m_mosaicPanel->grab();
+                if (!mosaicPixmap.isNull()) {
+                    m_mosaicPipLabel->setPixmap(mosaicPixmap.scaled(m_mosaicPipLabel->size(), Qt::KeepAspectRatio, Qt::FastTransformation));
+                }
+            }
         }
     }
 }

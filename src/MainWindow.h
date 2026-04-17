@@ -178,6 +178,8 @@ private:
     // Video
     QTabWidget *m_centerTabs = nullptr;
     QLabel *m_videoLabel = nullptr;
+    QLabel *m_videoPipLabel = nullptr;  // PiP in mosaic tab
+    QLabel *m_mosaicPipLabel = nullptr; // PiP in video tab
 
     // Status bar
     QLabel *m_fpsLabel = nullptr;
