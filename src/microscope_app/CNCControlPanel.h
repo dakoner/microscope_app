@@ -67,6 +67,7 @@ private:
 
     void setupUi();
     void parseStatus(const QString &statusStr);
+    bool flushPendingScanEventIfIdle();
 
     SerialWorker *m_serialWorker = nullptr;
     QTimer m_serialPollTimer;

@@ -258,18 +258,9 @@ void CNCControlPanel::parseStatus(const QString &statusStr)
         m_statusLabel->setText(parts[0]);
         emit stateUpdated(parts[0]);
 
-        // Internal scan markers are released only once the controller is truly idle.
-        if (parts[0] == "Idle" && m_lastState != "Idle") {
-            if (m_pendingScanEvent == PendingScanEvent::RowReady) {
-                m_pendingScanEvent = PendingScanEvent::None;
-                emit scanRowReady();
-                processQueue();
-            } else if (m_pendingScanEvent == PendingScanEvent::ScanFinished) {
-                m_pendingScanEvent = PendingScanEvent::None;
-                emit scanFinished();
-                emit logSignal("Scan finished.");
-                processQueue();
-            }
+        // Release internal scan markers once the controller is truly idle.
+        if (parts[0] == "Idle" && flushPendingScanEventIfIdle()) {
+            processQueue();
         }
 
         m_lastState = parts[0];
@@ -332,12 +323,20 @@ void CNCControlPanel::processQueue()
 
         if (cmd == "__SCAN_ROW_END__") {
             m_pendingScanEvent = PendingScanEvent::RowReady;
+            if (flushPendingScanEventIfIdle()) {
+                processQueue();
+                return;
+            }
             processQueue();
             return;
         }
 
         if (cmd == "__SCAN_DONE__") {
             m_pendingScanEvent = PendingScanEvent::ScanFinished;
+            if (flushPendingScanEventIfIdle()) {
+                processQueue();
+                return;
+            }
             processQueue();
             return;
         }
@@ -346,6 +345,28 @@ void CNCControlPanel::processQueue()
         m_serialWorker->send_command(cmd.toStdString());
         m_waitingForOk = true;
     }
+}
+
+bool CNCControlPanel::flushPendingScanEventIfIdle()
+{
+    if (m_lastState != "Idle" || m_pendingScanEvent == PendingScanEvent::None)
+        return false;
+
+    PendingScanEvent pending = m_pendingScanEvent;
+    m_pendingScanEvent = PendingScanEvent::None;
+
+    if (pending == PendingScanEvent::RowReady) {
+        emit scanRowReady();
+        return true;
+    }
+
+    if (pending == PendingScanEvent::ScanFinished) {
+        emit scanFinished();
+        emit logSignal("Scan finished.");
+        return true;
+    }
+
+    return false;
 }
 
 void CNCControlPanel::pollStatus()

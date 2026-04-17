@@ -20,7 +20,9 @@
 #include <QPixmap>
 #include <QPointF>
 #include <QImage>
+#include <QElapsedTimer>
 #include <cstdint>
+#include <deque>
 
 namespace Ui { class MainWindow; }
 
@@ -78,7 +80,7 @@ private slots:
     void pollCameraParams();
 
     // Frame pipeline
-    void updateFrame(QImage image);
+    void updateFrame(QImage image, double frameTimestampSec);
     void updateFps(double fps);
     void handleError(QString message);
 
@@ -108,6 +110,11 @@ private:
     void connectSignals();
     void toggleCenterViewTab();
     void repositionPipOverlays();
+    void startScanRowRecording(int rowNumber);
+    void stopScanRowRecording();
+    double monotonicNowSec() const;
+    void addPoseSample(double x, double y, double timestampSec);
+    bool interpolatedPoseAt(double timestampSec, double &xOut, double &yOut) const;
     void syncUi();
     void updateSliderFromTime(double current, double minVal, double maxVal);
     void refreshVideoLabel();
@@ -125,6 +132,7 @@ private:
     // Camera
     MindVisionCamera *m_camera = nullptr;
     VideoThread *m_videoThread = nullptr;
+    VideoThread *m_scanVideoThread = nullptr;
     bool m_isCameraRunning = false;
     bool m_recordingRequested = false;
     double m_currentFps = 30.0;
@@ -158,6 +166,18 @@ private:
     double m_scanCurrentY = 0;
     bool m_scanIsFirstStrip = true;
     double m_scanFovXMm = 0, m_scanFovYMm = 0;
+    QString m_scanVideoOutputDir;
+    qint64 m_scanSessionTimestamp = 0;
+    bool m_scanRowRecordingActive = false;
+    int m_scanRecordingRowNumber = 0;
+
+    struct PoseSample {
+        double timestampSec = 0.0;
+        double xMm = 0.0;
+        double yMm = 0.0;
+    };
+    QElapsedTimer m_poseClock;
+    std::deque<PoseSample> m_poseSamples;
 
     // Ruler / Measurement
     bool m_rulerActive = false;

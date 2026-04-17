@@ -44,6 +44,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui = new Ui::MainWindow;
     ui->setupUi(this);
+    m_poseClock.start();
 
     // Assign widget pointers from .ui
     m_mainSplitter = ui->m_mainSplitter;
@@ -154,20 +155,24 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_camera, &MindVisionCamera::fpsChanged, this, &MainWindow::updateFps);
     connect(m_camera, &MindVisionCamera::errorOccurred, this, &MainWindow::handleError);
     m_videoThread = new VideoThread(this);
+    m_scanVideoThread = new VideoThread(this);
 
     // Camera frame signal – connect to frameReady
     connect(m_camera, &MindVisionCamera::frameReady, this,
             [this](QImage image, qint64 /*ts*/) {
+        const double frameTimestampSec = monotonicNowSec();
         ++m_framesReceivedCount;
         updateFrameStatsLabel();
 
         // Recording
         if (m_videoThread->isRunning())
             m_videoThread->addFrame(image);
+        if (m_scanVideoThread->isRunning())
+            m_scanVideoThread->addFrame(image);
 
         // Temporarily unthrottled: process every frame.
         m_lastUiUpdateTime = nowSec();
-        updateFrame(std::move(image));
+        updateFrame(std::move(image), frameTimestampSec);
     });
 
     // Param poll timer
@@ -489,6 +494,7 @@ void MainWindow::onStopClicked()
 {
     m_paramPollTimer.stop();
     m_isCameraRunning = false;
+    stopScanRowRecording();
     if (m_videoThread->isRunning())
         onRecordClicked();
 
@@ -550,7 +556,7 @@ void MainWindow::onHomeAndRunClicked()
 
 // ---------- Frame pipeline ----------
 
-void MainWindow::updateFrame(QImage image)
+void MainWindow::updateFrame(QImage image, double frameTimestampSec)
 {
     if (image.isNull()) return;
 
@@ -587,8 +593,12 @@ void MainWindow::updateFrame(QImage image)
 
     // Mosaic update (temporarily unthrottled)
     if (m_mosaicPanel && m_cncState != "Home") {
+        double poseX = m_currentCncXMm;
+        double poseY = m_currentCncYMm;
+        interpolatedPoseAt(frameTimestampSec, poseX, poseY);
+
         m_lastMosaicUpdateTime = nowSec();
-        m_mosaicPanel->updateMosaic(image, m_currentCncXMm, m_currentCncYMm);
+        m_mosaicPanel->updateMosaic(image, poseX, poseY);
         ++m_framesWrittenToMosaicCount;
         updateFrameStatsLabel();
 
@@ -1006,8 +1016,70 @@ void MainWindow::onCncPositionUpdated(double x, double y, double /*z*/)
 {
     m_currentCncXMm = x;
     m_currentCncYMm = y;
+    addPoseSample(x, y, monotonicNowSec());
     if (m_mosaicPanel)
         m_mosaicPanel->setCncPosition(x, y);
+}
+
+double MainWindow::monotonicNowSec() const
+{
+    return static_cast<double>(m_poseClock.nsecsElapsed()) * 1e-9;
+}
+
+void MainWindow::addPoseSample(double x, double y, double timestampSec)
+{
+    m_poseSamples.push_back({timestampSec, x, y});
+
+    constexpr std::size_t kMaxPoseSamples = 512;
+    constexpr double kMaxPoseWindowSec = 8.0;
+
+    while (m_poseSamples.size() > kMaxPoseSamples) {
+        m_poseSamples.pop_front();
+    }
+
+    while (!m_poseSamples.empty() &&
+           (timestampSec - m_poseSamples.front().timestampSec) > kMaxPoseWindowSec) {
+        m_poseSamples.pop_front();
+    }
+}
+
+bool MainWindow::interpolatedPoseAt(double timestampSec, double &xOut, double &yOut) const
+{
+    if (m_poseSamples.empty())
+        return false;
+
+    if (m_poseSamples.size() == 1) {
+        xOut = m_poseSamples.front().xMm;
+        yOut = m_poseSamples.front().yMm;
+        return true;
+    }
+
+    if (timestampSec <= m_poseSamples.front().timestampSec) {
+        xOut = m_poseSamples.front().xMm;
+        yOut = m_poseSamples.front().yMm;
+        return true;
+    }
+
+    if (timestampSec >= m_poseSamples.back().timestampSec) {
+        xOut = m_poseSamples.back().xMm;
+        yOut = m_poseSamples.back().yMm;
+        return true;
+    }
+
+    for (std::size_t i = 1; i < m_poseSamples.size(); ++i) {
+        const PoseSample &left = m_poseSamples[i - 1];
+        const PoseSample &right = m_poseSamples[i];
+
+        if (timestampSec <= right.timestampSec) {
+            const double dt = right.timestampSec - left.timestampSec;
+            const double alpha = (dt > 1e-9) ? (timestampSec - left.timestampSec) / dt : 0.0;
+            xOut = left.xMm + alpha * (right.xMm - left.xMm);
+            yOut = left.yMm + alpha * (right.yMm - left.yMm);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void MainWindow::onCncStateUpdated(const QString &state)
@@ -1066,6 +1138,11 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
     m_scanCurrentY = m_scanYMax - (m_scanFovYMm / 2.0);
     m_scanIsFirstStrip = true;
     m_isScanning = true;
+    m_scanSessionTimestamp = QDateTime::currentSecsSinceEpoch();
+    QDir videosDir("videos");
+    videosDir.mkpath(".");
+    m_scanVideoOutputDir = videosDir.filePath(QString("scan_%1").arg(m_scanSessionTimestamp));
+    QDir().mkpath(m_scanVideoOutputDir);
 
     m_cncControlPanel->sendCommand("G90");
     m_cncControlPanel->sendCommand(QString("F%1").arg(m_scanFeedrate));
@@ -1084,12 +1161,17 @@ void MainWindow::scanNextRow()
     if (!m_isScanning || !m_cncControlPanel) return;
 
     if (m_scanCurrentY > m_scanYMin) {
+        startScanRowRecording(m_scanCurrentRow + 1);
+
         double yTarget = std::max(m_scanCurrentY, m_scanYMin + m_scanFovYMm / 2.0);
         double startX = m_scanXMin + (m_scanFovXMm / 2.0);
         double endX = m_scanXMax - (m_scanFovXMm / 2.0);
+        bool reverseRow = m_scanSerpentine && (m_scanCurrentRow % 2 == 1);
+        double rowStartX = reverseRow ? endX : startX;
+        double rowEndX = reverseRow ? startX : endX;
 
-        if (m_scanIsFirstStrip) {
-            m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(startX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
+        if (m_scanIsFirstStrip || !m_scanSerpentine || m_scanHomeX || m_scanHomeY) {
+            m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(rowStartX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
             m_scanIsFirstStrip = false;
         } else {
             m_cncControlPanel->sendCommand(QString("G1 Y%1").arg(yTarget, 0, 'f', 3));
@@ -1100,9 +1182,11 @@ void MainWindow::scanNextRow()
         if (m_scanHomeX)
             m_cncControlPanel->sendCommand("$HX");
 
-        m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(startX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
+        if (m_scanHomeX || m_scanHomeY) {
+            m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(rowStartX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
+        }
         m_cncControlPanel->sendCommand("G4 P0");
-        m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(endX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
+        m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(rowEndX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
         m_cncControlPanel->sendCommand("G4 P0");
         m_cncControlPanel->sendCommand("__SCAN_ROW_END__");
 
@@ -1115,6 +1199,7 @@ void MainWindow::scanNextRow()
 void MainWindow::onRowFinished()
 {
     if (!m_isScanning) return;
+    stopScanRowRecording();
     m_scanCurrentRow++;
     if (m_scanPanel)
         m_scanPanel->updateProgress(m_scanCurrentRow, m_scanTotalRows);
@@ -1125,6 +1210,7 @@ void MainWindow::cancelScan()
 {
     if (!m_isScanning) return;
     m_isScanning = false;
+    stopScanRowRecording();
     if (m_cncControlPanel) {
         m_cncControlPanel->sendCommand("!");
         m_cncControlPanel->stop();
@@ -1138,9 +1224,54 @@ void MainWindow::onScanFinished()
 {
     if (!m_isScanning) return;
     m_isScanning = false;
+    stopScanRowRecording();
     log("Mosaic scan finished.");
     if (m_scanPanel)
         m_scanPanel->scanFinished(true);
+}
+
+void MainWindow::startScanRowRecording(int rowNumber)
+{
+    if (!m_scanVideoThread || !m_isCameraRunning || m_currentImage.isNull())
+        return;
+
+    stopScanRowRecording();
+
+    if (m_scanVideoOutputDir.isEmpty()) {
+        QDir videosDir("videos");
+        videosDir.mkpath(".");
+        if (m_scanSessionTimestamp == 0)
+            m_scanSessionTimestamp = QDateTime::currentSecsSinceEpoch();
+        m_scanVideoOutputDir = videosDir.filePath(QString("scan_%1").arg(m_scanSessionTimestamp));
+        QDir().mkpath(m_scanVideoOutputDir);
+    }
+
+    double recordFps = m_currentFps > 0.1 ? m_currentFps : 30.0;
+    QString filename = QDir(m_scanVideoOutputDir)
+                           .filePath(QString("row_%1.mkv").arg(rowNumber, 4, 10, QChar('0')));
+
+    m_scanVideoThread->startRecording(m_currentImage.width(), m_currentImage.height(),
+                                      recordFps, filename);
+    m_scanRowRecordingActive = true;
+    m_scanRecordingRowNumber = rowNumber;
+    log(QString("Row %1 recording started: %2")
+            .arg(rowNumber)
+            .arg(QFileInfo(filename).fileName()));
+}
+
+void MainWindow::stopScanRowRecording()
+{
+    if (!m_scanVideoThread || !m_scanVideoThread->isRunning()) {
+        m_scanRowRecordingActive = false;
+        return;
+    }
+
+    const int rowNumber = m_scanRecordingRowNumber;
+    m_scanVideoThread->stopRecording();
+    m_scanVideoThread->wait(5000);
+    m_scanRowRecordingActive = false;
+    if (rowNumber > 0)
+        log(QString("Row %1 recording saved.").arg(rowNumber));
 }
 
 // ---------- Logging ----------
