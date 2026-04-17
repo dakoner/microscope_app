@@ -27,7 +27,7 @@ MVSDK_LIB = ../mindvision_qobject/Lib
 
 # Include paths
 INCLUDEPATH += \
-    src \
+    src/microscope_app \
     $$MVSDK_INCLUDE \
     ../mindvision_qobject/src \
     ../serial_qobject/src
@@ -40,32 +40,32 @@ DEFINES += MINDVISION_QOBJECT_LIBRARY
 
 # Main application sources
 SOURCES += \
-    src/main.cpp \
-    src/MainWindow.cpp \
-    src/CNCControlPanel.cpp \
-    src/MosaicWidget.cpp \
-    src/MosaicPanel.cpp \
-    src/IntensityChart.cpp \
-    src/ColorPickerWidget.cpp \
-    src/LEDController.cpp \
-    src/ScanConfigPanel.cpp \
+    src/microscope_app/main.cpp \
+    src/microscope_app/MainWindow.cpp \
+    src/microscope_app/CNCControlPanel.cpp \
+    src/microscope_app/MosaicWidget.cpp \
+    src/microscope_app/MosaicPanel.cpp \
+    src/microscope_app/IntensityChart.cpp \
+    src/microscope_app/ColorPickerWidget.cpp \
+    src/microscope_app/LEDController.cpp \
+    src/microscope_app/ScanConfigPanel.cpp \
     ../mindvision_qobject/src/MindVisionCamera.cpp \
     ../mindvision_qobject/src/VideoThread.cpp \
     ../serial_qobject/src/SerialWorker.cpp
 
 HEADERS += \
-    src/MainWindow.h \
-    src/CNCControlPanel.h \
-    src/MosaicWidget.h \
-    src/MosaicPanel.h \
-    src/IntensityChart.h \
-    src/ColorPickerWidget.h \
-    src/LEDController.h \
-    src/ScanConfigPanel.h \
+    src/microscope_app/MainWindow.h \
+    src/microscope_app/CNCControlPanel.h \
+    src/microscope_app/MosaicWidget.h \
+    src/microscope_app/MosaicPanel.h \
+    src/microscope_app/IntensityChart.h \
+    src/microscope_app/ColorPickerWidget.h \
+    src/microscope_app/LEDController.h \
+    src/microscope_app/ScanConfigPanel.h \
     ../mindvision_qobject/src/MindVisionCamera.h \
     ../mindvision_qobject/src/VideoThread.h \
     ../mindvision_qobject/src/mindvision_qobject_global.h \
     ../serial_qobject/src/SerialWorker.h
 
 FORMS += \
-    src/MainWindow.ui
+    src/microscope_app/MainWindow.ui
