@@ -24,6 +24,7 @@ public:
     void updateMosaic(const QImage &cameraFrame, double cncXMm, double cncYMm);
     void setCncPosition(double xMm, double yMm);
     void setStageCircles(const QVector<std::tuple<double, double, double>> &circlesMm);
+    QPixmap createPreview(const QSize &size) const;
 
 signals:
     void requestMove(double x, double y);
@@ -53,6 +54,7 @@ private:
 
     QMap<QPair<int,int>, QImage> m_tiles;
     QMap<QPair<int,int>, QImage> m_tileCoverage;
+    QRectF m_currentFrameRect;
 
     int m_cameraFrameWidthPx = 0;
     int m_cameraFrameHeightPx = 0;

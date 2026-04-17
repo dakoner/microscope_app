@@ -125,14 +125,24 @@ MainWindow::MainWindow(QWidget *parent)
     m_videoPipLabel->setStyleSheet("border: 2px solid #888; background-color: black;");
     m_videoPipLabel->setScaledContents(true);
     m_videoPipLabel->setAlignment(Qt::AlignCenter);
-    m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
 
     m_mosaicPipLabel = new QLabel(m_centerTabs->widget(0));
     m_mosaicPipLabel->setFixedSize(240, 180);
     m_mosaicPipLabel->setStyleSheet("border: 2px solid #888; background-color: black;");
     m_mosaicPipLabel->setScaledContents(true);
     m_mosaicPipLabel->setAlignment(Qt::AlignCenter);
-    m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
+
+    // Defer initial positioning until after the layout pass gives containers their real sizes
+    QTimer::singleShot(0, this, [this]() {
+        if (m_videoPipLabel && m_mosaicTabContainer) {
+            m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
+            m_videoPipLabel->raise();
+        }
+        if (m_mosaicPipLabel && m_centerTabs->widget(0)) {
+            m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
+            m_mosaicPipLabel->raise();
+        }
+    });
 
     connectSignals();
 
@@ -243,9 +253,11 @@ void MainWindow::connectSignals()
         QTimer::singleShot(100, this, [this]() {
             if (m_mosaicPipLabel && m_centerTabs->widget(0)) {
                 m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
+                m_mosaicPipLabel->raise();
             }
             if (m_videoPipLabel && m_mosaicTabContainer) {
                 m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
+                m_videoPipLabel->raise();
             }
         });
     });
@@ -319,14 +331,14 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
             }
         }
     } else if (watched == m_mosaicTabContainer && event->type() == QEvent::Resize) {
-        // Reposition video PiP label when mosaic tab is resized
         if (m_videoPipLabel) {
             m_videoPipLabel->move(m_mosaicTabContainer->width() - 250, 10);
+            m_videoPipLabel->raise();
         }
     } else if (m_centerTabs && watched == m_centerTabs->widget(0) && event->type() == QEvent::Resize) {
-        // Reposition mosaic PiP label when video tab is resized
         if (m_mosaicPipLabel) {
             m_mosaicPipLabel->move(m_centerTabs->widget(0)->width() - 250, 10);
+            m_mosaicPipLabel->raise();
         }
     }
     return QMainWindow::eventFilter(watched, event);
@@ -374,7 +386,6 @@ void MainWindow::refreshVideoLabel()
     }
     m_lastVideoLabelSize = labelSize;
 
-    // Update PiP video label in mosaic tab
     if (m_videoPipLabel && !m_currentPixmap.isNull()) {
         m_videoPipLabel->setPixmap(m_currentPixmap.scaled(m_videoPipLabel->size(), Qt::KeepAspectRatio, Qt::FastTransformation));
     }
@@ -511,11 +522,14 @@ void MainWindow::updateFrame(QImage image)
     }
 
     m_currentImage = image;
+    m_currentPixmap = QPixmap::fromImage(m_currentImage);
 
-    // Only update the video label when its tab is visible
+    if (m_videoPipLabel && !m_currentPixmap.isNull()) {
+        m_videoPipLabel->setPixmap(m_currentPixmap.scaled(m_videoPipLabel->size(), Qt::KeepAspectRatio, Qt::FastTransformation));
+    }
+
     bool videoTabVisible = m_centerTabs->currentWidget() == m_videoLabel;
     if (videoTabVisible) {
-        m_currentPixmap = QPixmap::fromImage(m_currentImage);
         refreshVideoLabel();
     }
 
@@ -532,11 +546,10 @@ void MainWindow::updateFrame(QImage image)
             m_lastMosaicUpdateTime = now2;
             m_mosaicPanel->updateMosaic(image, m_currentCncXMm, m_currentCncYMm);
             
-            // Update PiP mosaic label in video tab
             if (m_mosaicPipLabel) {
-                QPixmap mosaicPixmap = m_mosaicPanel->grab();
+                QPixmap mosaicPixmap = m_mosaicPanel->createPreview(m_mosaicPipLabel->size());
                 if (!mosaicPixmap.isNull()) {
-                    m_mosaicPipLabel->setPixmap(mosaicPixmap.scaled(m_mosaicPipLabel->size(), Qt::KeepAspectRatio, Qt::FastTransformation));
+                    m_mosaicPipLabel->setPixmap(mosaicPixmap);
                 }
             }
         }

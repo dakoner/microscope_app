@@ -3,6 +3,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPainter>
+#include <QPixmap>
 #include <cmath>
 #include <algorithm>
 
@@ -109,9 +110,10 @@ void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double 
     int scaledW = int(m_cameraFrameWidthPx * SCALE_FACTOR);
     int scaledH = int(m_cameraFrameHeightPx * SCALE_FACTOR);
     QRect frameRect(drawX, drawY, scaledW, scaledH);
+    m_currentFrameRect = QRectF(frameRect);
 
     m_displayWidget->beginUpdate();
-    m_displayWidget->setCurrentFrameRect(QRectF(frameRect));
+    m_displayWidget->setCurrentFrameRect(m_currentFrameRect);
     m_displayWidget->setCncPosition(cncXMm, cncYMm);
 
     int startCol = std::max(0, frameRect.left() / TILE_SIZE);
@@ -166,6 +168,13 @@ void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double 
     m_positionLabel->setText(QString("CNC: %1 mm, %2 mm")
                                  .arg(cncXMm, 0, 'f', 1)
                                  .arg(cncYMm, 0, 'f', 1));
+}
+
+QPixmap MosaicPanel::createPreview(const QSize &size) const
+{
+    if (!m_displayWidget)
+        return {};
+    return m_displayWidget->createViewportPreview(size);
 }
 
 void MosaicPanel::blendIntoTile(QImage &tile, QImage &coverage,

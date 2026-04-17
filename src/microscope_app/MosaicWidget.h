@@ -29,6 +29,7 @@ public:
     QPointF widgetToImageCoords(const QPointF &widgetPos) const;
     QPointF imageToWidgetCoords(const QPointF &imagePos) const;
     void fitToWindow();
+    QPixmap createViewportPreview(const QSize &size) const;
 
 signals:
     void clicked(double imgX, double imgY);
@@ -81,6 +82,7 @@ private:
     QScrollBar *m_vScrollbar = nullptr;
     bool m_updatingScrollbars = false;
     bool m_batchUpdate = false;
+    bool m_hasInitializedView = false;
 };
 
 #endif // MOSAICWIDGET_H

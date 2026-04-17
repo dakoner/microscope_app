@@ -78,8 +78,11 @@ void MosaicWidget::resetMosaic(int width, int height, int tileSize)
     m_totalHeight = height;
     m_tileSize = tileSize;
     m_tiles.clear();
-    if (width > 0 && height > 0)
+    m_hasInitializedView = false;
+    if (width > 0 && height > 0 && !rect().isEmpty()) {
         fitToWindow();
+        m_hasInitializedView = true;
+    }
     update();
 }
 
@@ -205,6 +208,11 @@ void MosaicWidget::doZoom(int direction, QPointF center)
 void MosaicWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    if (!m_hasInitializedView && m_totalWidth > 0 && m_totalHeight > 0 && !rect().isEmpty()) {
+        fitToWindow();
+        m_hasInitializedView = true;
+        return;
+    }
     clampPanOffset();
     updateScrollbars();
 }
@@ -212,7 +220,95 @@ void MosaicWidget::resizeEvent(QResizeEvent *event)
 void MosaicWidget::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
-    fitToWindow();
+    if (!m_hasInitializedView && m_totalWidth > 0 && m_totalHeight > 0 && !rect().isEmpty()) {
+        fitToWindow();
+        m_hasInitializedView = true;
+    }
+}
+
+QPixmap MosaicWidget::createViewportPreview(const QSize &size) const
+{
+    if (!size.isValid() || m_totalWidth <= 0 || m_totalHeight <= 0)
+        return {};
+
+    QRectF visibleImage(-m_panOffset.x() / m_zoomFactor,
+                        -m_panOffset.y() / m_zoomFactor,
+                        width() / m_zoomFactor,
+                        height() / m_zoomFactor);
+    visibleImage = visibleImage.intersected(QRectF(0, 0, m_totalWidth, m_totalHeight));
+    if (visibleImage.isEmpty())
+        visibleImage = QRectF(0, 0, m_totalWidth, m_totalHeight);
+
+    QPixmap preview(size);
+    preview.fill(QColor(20, 20, 20));
+
+    QPainter painter(&preview);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+
+    double scaleW = double(size.width()) / visibleImage.width();
+    double scaleH = double(size.height()) / visibleImage.height();
+    double scale = std::min(scaleW, scaleH);
+    if (scale <= 0.0)
+        return preview;
+
+    double drawnW = visibleImage.width() * scale;
+    double drawnH = visibleImage.height() * scale;
+    QPointF offset((size.width() - drawnW) / 2.0, (size.height() - drawnH) / 2.0);
+
+    painter.translate(offset - QPointF(visibleImage.x() * scale, visibleImage.y() * scale));
+    painter.scale(scale, scale);
+    painter.fillRect(QRectF(0, 0, m_totalWidth, m_totalHeight), Qt::white);
+
+    for (auto it = m_tiles.constBegin(); it != m_tiles.constEnd(); ++it) {
+        int row = it.key().first;
+        int col = it.key().second;
+        int x = col * m_tileSize;
+        int y = row * m_tileSize;
+        QRectF tileRect(x, y, it.value().width(), it.value().height());
+        if (!tileRect.intersects(visibleImage))
+            continue;
+        painter.drawImage(x, y, it.value());
+    }
+
+    for (const auto &r : m_selectedRects) {
+        QPen pen(QColor(255, 105, 180), 3.0 / scale);
+        painter.setPen(pen);
+        painter.setBrush(QColor(255, 105, 180, 50));
+        painter.drawRect(r);
+    }
+
+    if (!m_currentFrameRect.isNull()) {
+        QPen pen(Qt::green, 2.0 / scale);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(m_currentFrameRect);
+    }
+
+    for (const auto &[center, radius] : m_overlayCircles) {
+        QPen pen(QColor(255, 196, 0), 3.0 / scale);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(center, radius, radius);
+    }
+
+    if (m_gridWidth > 0 && m_gridHeight > 0) {
+        QPen pen(QColor(128, 128, 128, 100), 1.0 / scale);
+        painter.setPen(pen);
+        int maxLines = 2000;
+        int numV = m_totalWidth / m_gridWidth;
+        if (numV < maxLines) {
+            for (int i = 1; i <= numV; ++i)
+                painter.drawLine(i * m_gridWidth, 0, i * m_gridWidth, m_totalHeight);
+        }
+        int numH = m_totalHeight / m_gridHeight;
+        if (numH < maxLines) {
+            for (int i = 1; i <= numH; ++i)
+                painter.drawLine(0, i * m_gridHeight, m_totalWidth, i * m_gridHeight);
+        }
+    }
+
+    return preview;
 }
 
 void MosaicWidget::keyPressEvent(QKeyEvent *event)
