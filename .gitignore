@@ -1,0 +1,4 @@
+release/
+.vscode/
+.qmake.stash
+Camera/
