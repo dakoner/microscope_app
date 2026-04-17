@@ -22,15 +22,15 @@ CONFIG(debug, debug|release) {
 }
 
 # MindVision SDK
-MVSDK_INCLUDE = ../mindvision_qobject/Include
-MVSDK_LIB = ../mindvision_qobject/Lib
+MVSDK_INCLUDE = src/mindvision_qobject/Include
+MVSDK_LIB = src/mindvision_qobject/Lib
 
 # Include paths
 INCLUDEPATH += \
     src/microscope_app \
     $$MVSDK_INCLUDE \
-    ../mindvision_qobject/src \
-    ../serial_qobject/src
+    src/mindvision_qobject/src \
+    src/serial_qobject/src
 
 # Library paths
 LIBS += -L$$MVSDK_LIB -lMVSDK
@@ -49,9 +49,9 @@ SOURCES += \
     src/microscope_app/ColorPickerWidget.cpp \
     src/microscope_app/LEDController.cpp \
     src/microscope_app/ScanConfigPanel.cpp \
-    ../mindvision_qobject/src/MindVisionCamera.cpp \
-    ../mindvision_qobject/src/VideoThread.cpp \
-    ../serial_qobject/src/SerialWorker.cpp
+    src/mindvision_qobject/src/MindVisionCamera.cpp \
+    src/mindvision_qobject/src/VideoThread.cpp \
+    src/serial_qobject/src/SerialWorker.cpp
 
 HEADERS += \
     src/microscope_app/MainWindow.h \
@@ -62,10 +62,10 @@ HEADERS += \
     src/microscope_app/ColorPickerWidget.h \
     src/microscope_app/LEDController.h \
     src/microscope_app/ScanConfigPanel.h \
-    ../mindvision_qobject/src/MindVisionCamera.h \
-    ../mindvision_qobject/src/VideoThread.h \
-    ../mindvision_qobject/src/mindvision_qobject_global.h \
-    ../serial_qobject/src/SerialWorker.h
+    src/mindvision_qobject/src/MindVisionCamera.h \
+    src/mindvision_qobject/src/VideoThread.h \
+    src/mindvision_qobject/src/mindvision_qobject_global.h \
+    src/serial_qobject/src/SerialWorker.h
 
 FORMS += \
     src/microscope_app/MainWindow.ui
