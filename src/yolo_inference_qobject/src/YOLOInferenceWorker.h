@@ -2,10 +2,10 @@
 #define YOLOINFERENCEWORKER_H
 
 #include <QObject>
-#include <QProcess>
 #include <QImage>
 #include <QMutex>
 #include <deque>
+#include <memory>
 
 struct Detection {
     int x, y, w, h;  // Bounding box (x, y, width, height)
@@ -14,9 +14,8 @@ struct Detection {
 
 /**
  * YOLOInferenceWorker: Runs YOLO inference in a background thread.
- * 
- * Communicates with a Python subprocess via JSON on stdin/stdout.
- * Frames are sent for inference with optional frame skipping to match inference speed.
+ *
+ * Uses a TorchScript model loaded through LibTorch.
  */
 class YOLOInferenceWorker : public QObject
 {
@@ -44,25 +43,21 @@ signals:
     // Emitted on errors
     void errorOccurred(const QString &message);
 
-private slots:
-    void onProcessReadyReadStandardOutput();
-    void onProcessReadyReadStandardError();
-    void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
-    void onProcessError(QProcess::ProcessError error);
-
 private:
-    void sendFrameToInference(const QImage &frame, float confThreshold);
+    struct Impl;
 
-    QProcess *m_process = nullptr;
+    QString resolveModelPath() const;
+    std::vector<Detection> runInference(const QImage &frame, float confThreshold);
+    static float intersectionOverUnion(const Detection &a, const Detection &b);
+    static void applyNms(std::vector<Detection> &detections, float iouThreshold);
+
+    std::unique_ptr<Impl> m_impl;
     bool m_isRunning = false;
-    
+
     // Thread-safe storage of latest detections
     mutable QMutex m_detectionsMutex;
     std::vector<Detection> m_latestDetections;
-    
-    // Output buffering for reading JSON responses
-    QString m_outputBuffer;
-    
+
     // Frame skip counter
     int m_frameSkipCounter = 0;
     int m_frameSkipRate = 1;  // Process every Nth frame

@@ -1,58 +1,30 @@
-QT += core gui widgets serialport
+QT       += core gui
 
-CONFIG += c++20
-CONFIG -= debug_and_release
+TARGET = yolo_inference_qobject
+TEMPLATE = lib
+CONFIG += shared c++20
+
+DEFINES += QT_DEPRECATED_WARNINGS
+
 QMAKE_LFLAGS += -Wl,--disable-new-dtags
 
-TARGET = microscope_app
-TEMPLATE = app
+INCLUDEPATH += src
 
-# QScintilla configuration
-QSCI_INCLUDE = /usr/include/x86_64-linux-gnu/qt6/Qsci
-QSCI_LIB = /usr/lib/x86_64-linux-gnu
-INCLUDEPATH += $$QSCI_INCLUDE
-LIBS += -L$$QSCI_LIB -lqscintilla2_qt6
-
-# Build output directories
 CONFIG(debug, debug|release) {
-    DESTDIR = ./debug
-    OBJECTS_DIR = ./debug/.obj
-    MOC_DIR = ./debug/.moc
-    UI_DIR = ./debug/.ui
-    RCC_DIR = ./debug/.rcc
+    DESTDIR = $$OUT_PWD/debug
+    OBJECTS_DIR = $$OUT_PWD/debug
+    MOC_DIR = $$OUT_PWD/debug
 } else {
-    DESTDIR = ./release
-    OBJECTS_DIR = ./release/.obj
-    MOC_DIR = ./release/.moc
-    UI_DIR = ./release/.ui
-    RCC_DIR = ./release/.rcc
+    DESTDIR = $$OUT_PWD/release
+    OBJECTS_DIR = $$OUT_PWD/release
+    MOC_DIR = $$OUT_PWD/release
 }
 
-# MindVision SDK
-MVSDK_INCLUDE = src/mindvision_qobject/Include
-MVSDK_LIB = src/mindvision_qobject/Lib
+SOURCES += \
+    src/YOLOInferenceWorker.cpp
 
-# Include paths
-INCLUDEPATH += \
-    src/microscope_app \
-    $$MVSDK_INCLUDE \
-    src/mindvision_qobject/src \
-    src/serial_qobject/src \
-    src/yolo_inference_qobject/src
-
-# Library paths
-LIBS += -L$$MVSDK_LIB -lMVSDK
-
-# Embedded Python (CPython C API)
-PYTHON_CONFIG = /home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11-config
-PYTHON_BIN = /home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11
-PY_LIBDIR = /home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib
-PY_CFLAGS = $$system($$PYTHON_CONFIG --includes)
-PY_LDFLAGS = $$system($$PYTHON_CONFIG --embed --ldflags 2>/dev/null)
-isEmpty(PY_LDFLAGS): PY_LDFLAGS = $$system($$PYTHON_CONFIG --ldflags)
-QMAKE_CXXFLAGS += $$PY_CFLAGS
-LIBS += $$PY_LDFLAGS
-!isEmpty(PY_LIBDIR): QMAKE_LFLAGS += -Wl,-rpath,$$PY_LIBDIR
+HEADERS += \
+    src/YOLOInferenceWorker.h
 
 # LibTorch (TorchScript inference backend)
 LIBTORCH_ROOT = /home/davidek/src/libtorch
@@ -61,6 +33,7 @@ LIBTORCH_API_INCLUDE = $$LIBTORCH_ROOT/include/torch/csrc/api/include
 LIBTORCH_LIB = $$LIBTORCH_ROOT/lib
 INCLUDEPATH += $$LIBTORCH_INCLUDE $$LIBTORCH_API_INCLUDE
 LIBS += -L$$LIBTORCH_LIB -ltorch -ltorch_cpu -lc10
+
 TORCH_CUDA_LIB = $$files($$LIBTORCH_LIB/libtorch_cuda.so)
 !isEmpty(TORCH_CUDA_LIB) {
     CUDA_HAS_CUDNN = $$system(ldconfig -p | grep -c 'libcudnn.so')
@@ -113,43 +86,5 @@ TORCH_CUDA_LIB = $$files($$LIBTORCH_LIB/libtorch_cuda.so)
         message("LibTorch CUDA detected but cuDNN missing; building CPU fallback.")
     }
 }
+
 QMAKE_LFLAGS += -Wl,-rpath,$$LIBTORCH_LIB
-
-# Preprocessor definitions
-DEFINES += MINDVISION_QOBJECT_LIBRARY
-
-# Main application sources
-SOURCES += \
-    src/microscope_app/main.cpp \
-    src/microscope_app/MainWindow.cpp \
-    src/microscope_app/CNCControlPanel.cpp \
-    src/microscope_app/MosaicWidget.cpp \
-    src/microscope_app/MosaicPanel.cpp \
-    src/microscope_app/IntensityChart.cpp \
-    src/microscope_app/ColorPickerWidget.cpp \
-    src/microscope_app/LEDController.cpp \
-    src/microscope_app/ScanConfigPanel.cpp \
-    src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
-    src/microscope_app/PythonScintillaEditor.cpp \
-    src/mindvision_qobject/src/MindVisionCamera.cpp \
-    src/mindvision_qobject/src/VideoThread.cpp \
-    src/serial_qobject/src/SerialWorker.cpp
-
-HEADERS += \
-    src/microscope_app/MainWindow.h \
-    src/microscope_app/CNCControlPanel.h \
-    src/microscope_app/MosaicWidget.h \
-    src/microscope_app/MosaicPanel.h \
-    src/microscope_app/IntensityChart.h \
-    src/microscope_app/ColorPickerWidget.h \
-    src/microscope_app/LEDController.h \
-    src/microscope_app/ScanConfigPanel.h \
-    src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
-    src/microscope_app/PythonScintillaEditor.h \
-    src/mindvision_qobject/src/MindVisionCamera.h \
-    src/mindvision_qobject/src/VideoThread.h \
-    src/mindvision_qobject/src/mindvision_qobject_global.h \
-    src/serial_qobject/src/SerialWorker.h
-
-FORMS += \
-    src/microscope_app/MainWindow.ui
