@@ -638,7 +638,7 @@ void MainWindow::runPythonCode(const QString &command)
 
     // Try to evaluate as expression first (like REPL), then fall back to exec() for statements
     static const char *kExecScript =
-        "import io, contextlib, traceback\n"
+        "import io, sys, contextlib, traceback\n"
         "__qt_out_buf = io.StringIO()\n"
         "__qt_err_buf = io.StringIO()\n"
         "with contextlib.redirect_stdout(__qt_out_buf), contextlib.redirect_stderr(__qt_err_buf):\n"
@@ -653,10 +653,14 @@ void MainWindow::runPythonCode(const QString &command)
         "        try:\n"
         "            exec(__qt_code, __qt_globals, __qt_globals)\n"
         "        except Exception:\n"
-        "            traceback.print_exc()\n"
+        "            _et, _ev, _etb = sys.exc_info()\n"
+        "            _tb = _etb.tb_next if _etb and _etb.tb_next else _etb\n"
+        "            sys.stderr.write(''.join(traceback.format_exception(_et, _ev, _tb)))\n"
         "    except Exception:\n"
-        "        # eval() raised runtime error\n"
-        "        traceback.print_exc()\n"
+        "        # eval() raised runtime error - skip the wrapper frame\n"
+        "        _et, _ev, _etb = sys.exc_info()\n"
+        "        _tb = _etb.tb_next if _etb and _etb.tb_next else _etb\n"
+        "        sys.stderr.write(''.join(traceback.format_exception(_et, _ev, _tb)))\n"
         "__qt_out = __qt_out_buf.getvalue()\n"
         "__qt_err = __qt_err_buf.getvalue()\n";
 

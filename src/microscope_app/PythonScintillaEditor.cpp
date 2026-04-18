@@ -65,12 +65,22 @@ void PythonScintillaEditor::setupEditor()
 
 void PythonScintillaEditor::showPrompt()
 {
-    int line, pos;
-    getCursorPosition(&line, &pos);
-    
-    // Move to end of document
-    line = lines() - 1;
-    pos = lineLength(line);
+    int line = lines() - 1;
+
+    // If the last line is already an empty prompt, just update tracking and return.
+    const QString lastLine = text(line);
+    const bool isAlreadyEmptyPrompt =
+        (!m_awaitingContinuation && lastLine == QLatin1String(kPrompt)) ||
+        (m_awaitingContinuation  && lastLine == QLatin1String(kContinuation));
+    if (isAlreadyEmptyPrompt) {
+        m_promptLine = line;
+        int pos = lineLength(line);
+        setCursorPosition(line, pos);
+        ensureLineVisible(line);
+        return;
+    }
+
+    int pos = lineLength(line);
     setCursorPosition(line, pos);
 
     // Add newline if needed so prompt is always on its own line.
@@ -101,36 +111,50 @@ void PythonScintillaEditor::appendOutput(const QString &text)
     int line = lines() - 1;
     int pos = lineLength(line);
 
-    setCursorPosition(line, pos);
+    const QString currentLine = line >= 0 ? this->text(line) : QString();
+    const bool hasEmptyPromptAtEnd =
+        line >= 0 &&
+        line == m_promptLine &&
+        (currentLine == QLatin1String(kPrompt) || currentLine == QLatin1String(kContinuation));
 
-    // Always place output on a new line so it never becomes part of prompt input.
-    if (lineLength(line) > 0) {
-        insert("\n");
-        line = lines() - 1;
-        pos = 0;
-        setCursorPosition(line, pos);
-    }
+    if (hasEmptyPromptAtEnd) {
+        setCursorPosition(line, 0);
 
-    if (text.isEmpty()) {
-        // Preserve existing behavior: empty output requests a blank spacer line.
-        insert("\n");
-        line = this->lines() - 1;
+        QString outputBlock = text;
+        if (outputBlock.isEmpty()) {
+            outputBlock = "\n";
+        } else if (!outputBlock.endsWith('\n')) {
+            outputBlock += '\n';
+        }
+
+        insert(outputBlock);
+
+        m_promptLine = lines() - 1;
+        line = m_promptLine;
         pos = lineLength(line);
         setCursorPosition(line, pos);
         ensureLineVisible(line);
         return;
     }
 
-    // Split text and add each line
-    const QStringList outLines = text.split('\n', Qt::KeepEmptyParts);
-    for (int i = 0; i < outLines.size(); ++i) {
-        if (i > 0) {
-            insert("\n");
-        }
-        insert(outLines[i]);
+    setCursorPosition(line, pos);
+
+    // Build the complete block and insert in one call to guarantee correct ordering.
+    // (QScintilla's insert() does not advance the caret, so multiple calls would reverse text.)
+    QString toInsert;
+    if (lineLength(line) > 0) {
+        toInsert = '\n';
+    }
+    if (!text.isEmpty()) {
+        toInsert += text;
+    } else {
+        toInsert += '\n';
     }
 
-    // Move to end
+    if (!toInsert.isEmpty()) {
+        insert(toInsert);
+    }
+
     line = this->lines() - 1;
     pos = lineLength(line);
     setCursorPosition(line, pos);
