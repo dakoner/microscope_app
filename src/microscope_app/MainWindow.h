@@ -23,6 +23,7 @@
 #include <QElapsedTimer>
 #include <cstdint>
 #include <deque>
+#include <vector>
 
 namespace Ui { class MainWindow; }
 
@@ -34,6 +35,11 @@ class MosaicPanel;
 class IntensityChart;
 class ScanConfigPanel;
 class ColorPickerWidget;
+
+// Include for Detection struct (needed for std::vector<Detection>)
+#include "YOLOInferenceWorker.h"
+
+class YOLOInferenceWorker;  // Forward declare again for the member pointer
 
 class MainWindow : public QMainWindow
 {
@@ -83,6 +89,11 @@ private slots:
     void updateFrame(QImage image, double frameTimestampSec);
     void updateFps(double fps);
     void handleError(QString message);
+
+    // YOLO inference
+    void onYoloToggled(bool checked);
+    void onDetectionsReady(const std::vector<Detection> &detections);
+    void onYoloError(const QString &message);
 
     // Ruler / Measurement
     void onRulerToggled(bool checked);
@@ -178,6 +189,13 @@ private:
     };
     QElapsedTimer m_poseClock;
     std::deque<PoseSample> m_poseSamples;
+
+    // YOLO Inference / Tardigrade tracking
+    YOLOInferenceWorker *m_yoloWorker = nullptr;
+    std::vector<Detection> m_latestDetections;
+    bool m_yoloInferenceActive = false;
+    float m_yoloConfThreshold = 0.5f;
+    QAction *m_actionYoloInference = nullptr;
 
     // Ruler / Measurement
     bool m_rulerActive = false;

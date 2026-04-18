@@ -29,6 +29,7 @@
 #include "ScanConfigPanel.h"
 #include "IntensityChart.h"
 #include "ColorPickerWidget.h"
+#include "YOLOInferenceWorker.h"
 
 // ---------- helpers ----------
 
@@ -128,6 +129,31 @@ MainWindow::MainWindow(QWidget *parent)
     int ledIdx = ui->hardwareTabs->indexOf(ui->ledPlaceholder);
     ui->hardwareTabs->removeTab(ledIdx);
     ui->hardwareTabs->insertTab(ledIdx, m_ledController->widget(), "LED");
+
+    // YOLO Inference Worker
+    m_yoloWorker = new YOLOInferenceWorker(this);
+    m_yoloWorker->start();
+
+    // Create YOLO inference toggle action
+    m_actionYoloInference = new QAction("YOLO Inference", this);
+    m_actionYoloInference->setCheckable(true);
+    m_actionYoloInference->setToolTip("Toggle real-time tardigrade detection");
+
+    // Add to main toolbar (create if needed)
+    QToolBar *toolbar = nullptr;
+    QList<QToolBar *> toolbars = findChildren<QToolBar *>();
+    if (!toolbars.isEmpty()) {
+        toolbar = toolbars.first();
+    } else {
+        toolbar = addToolBar("Main Toolbar");
+    }
+    
+    if (toolbar && !toolbar->actions().isEmpty()) {
+        toolbar->addSeparator();
+    }
+    if (toolbar) {
+        toolbar->addAction(m_actionYoloInference);
+    }
 
     // Create picture-in-picture labels
     m_videoPipLabel = new QLabel(m_mosaicTabContainer);
@@ -231,6 +257,13 @@ void MainWindow::connectSignals()
     connect(m_actionHomeAndRun, &QAction::triggered, this, &MainWindow::onHomeAndRunClicked);
     connect(m_actionRuler, &QAction::toggled, this, &MainWindow::onRulerToggled);
     connect(m_actionColorPicker, &QAction::toggled, this, &MainWindow::onColorPickerToggled);
+
+    // YOLO Inference
+    connect(m_actionYoloInference, &QAction::toggled, this, &MainWindow::onYoloToggled);
+    if (m_yoloWorker) {
+        connect(m_yoloWorker, &YOLOInferenceWorker::detectionsReady, this, &MainWindow::onDetectionsReady);
+        connect(m_yoloWorker, &YOLOInferenceWorker::errorOccurred, this, &MainWindow::onYoloError);
+    }
 
     // Camera controls
     connect(m_chkAutoExposure, &QCheckBox::toggled, this, &MainWindow::onAutoExposureToggled);
@@ -413,9 +446,10 @@ void MainWindow::refreshVideoLabel()
     if (m_currentPixmap.isNull()) return;
 
     QSize labelSize = m_videoLabel->size();
+    QPixmap display = m_currentPixmap.copy();
 
+    // Draw ruler if active
     if (m_rulerActive && m_hasRulerStart) {
-        QPixmap display = m_currentPixmap.copy();
         QPainter painter(&display);
         QPen pen(QColor(0, 255, 255), 2);
         painter.setPen(pen);
@@ -426,10 +460,31 @@ void MainWindow::refreshVideoLabel()
         painter.drawPoint(m_rulerStart);
         painter.drawPoint(end);
         painter.end();
-        m_videoLabel->setPixmap(display.scaled(labelSize, Qt::KeepAspectRatio, Qt::FastTransformation));
-    } else {
-        m_videoLabel->setPixmap(m_currentPixmap.scaled(labelSize, Qt::KeepAspectRatio, Qt::FastTransformation));
     }
+
+    // Draw YOLO detections if inference is active
+    if (m_yoloInferenceActive && !m_latestDetections.empty()) {
+        QPainter painter(&display);
+        for (const Detection &det : m_latestDetections) {
+            // Draw bounding box in green
+            QPen pen(QColor(0, 255, 0), 2);
+            painter.setPen(pen);
+            painter.drawRect(det.x, det.y, det.w, det.h);
+
+            // Draw confidence score
+            QFont font = painter.font();
+            font.setPointSize(8);
+            painter.setFont(font);
+            QString label = QString::number(det.conf, 'f', 2);
+            QRect textRect = painter.fontMetrics().boundingRect(label);
+            painter.fillRect(det.x, det.y - textRect.height() - 2, textRect.width() + 4, textRect.height() + 2, QColor(0, 255, 0, 150));
+            painter.setPen(QColor(0, 0, 0));
+            painter.drawText(det.x + 2, det.y - 2, label);
+        }
+        painter.end();
+    }
+
+    m_videoLabel->setPixmap(display.scaled(labelSize, Qt::KeepAspectRatio, Qt::FastTransformation));
     m_lastVideoLabelSize = labelSize;
 
     if (m_videoPipLabel && !m_currentPixmap.isNull()) {
@@ -608,6 +663,11 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
                 m_mosaicPipLabel->setPixmap(mosaicPixmap);
             }
         }
+    }
+
+    // YOLO inference
+    if (m_yoloInferenceActive && m_yoloWorker && m_yoloWorker->isRunning()) {
+        m_yoloWorker->inferFrame(image, m_yoloConfThreshold);
     }
 }
 
@@ -944,6 +1004,38 @@ void MainWindow::onColorPickerToggled(bool checked)
         m_rightTabs->setCurrentIndex(m_colorPickerTabIndex);
         if (m_rulerActive)
             m_actionRuler->setChecked(false);
+    }
+}
+
+// ---------- YOLO Inference ----------
+
+void MainWindow::onYoloToggled(bool checked)
+{
+    m_yoloInferenceActive = checked;
+    if (checked) {
+        log("YOLO inference started");
+    } else {
+        log("YOLO inference stopped");
+        m_latestDetections.clear();
+        refreshVideoLabel();
+    }
+}
+
+void MainWindow::onDetectionsReady(const std::vector<Detection> &detections)
+{
+    m_latestDetections = detections;
+    // Only refresh if video tab is visible to avoid unnecessary repaints
+    if (m_centerTabs->currentWidget() == m_videoLabel) {
+        refreshVideoLabel();
+    }
+}
+
+void MainWindow::onYoloError(const QString &message)
+{
+    log(QString("YOLO Error: %1").arg(message));
+    m_yoloInferenceActive = false;
+    if (m_actionYoloInference) {
+        m_actionYoloInference->setChecked(false);
     }
 }
 
