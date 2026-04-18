@@ -1,6 +1,16 @@
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
 
+#ifdef slots
+#undef slots
+#define COPILOT_RESTORE_QT_SLOTS_MACRO
+#endif
+#include <Python.h>
+#ifdef COPILOT_RESTORE_QT_SLOTS_MACRO
+#define slots Q_SLOTS
+#undef COPILOT_RESTORE_QT_SLOTS_MACRO
+#endif
+
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QFileDialog>
@@ -8,6 +18,7 @@
 #include <QVBoxLayout>
 #include <QMenuBar>
 #include <QStatusBar>
+#include <QToolBar>
 #include <QPainter>
 #include <QPen>
 #include <QColor>
@@ -30,6 +41,9 @@
 #include "IntensityChart.h"
 #include "ColorPickerWidget.h"
 #include "YOLOInferenceWorker.h"
+#include "PythonScintillaEditor.h"
+
+static MainWindow *g_mainWindowForPython = nullptr;
 
 // ---------- helpers ----------
 
@@ -38,11 +52,97 @@ static double nowSec()
     return static_cast<double>(QDateTime::currentMSecsSinceEpoch()) / 1000.0;
 }
 
+static QString resolveEmbeddedPythonHome()
+{
+    const QStringList candidates = {
+        "/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu",
+        "/home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu"
+    };
+    for (const QString &path : candidates) {
+        if (QDir(path).exists()) {
+            return path;
+        }
+    }
+    return {};
+}
+
+static void configureEmbeddedPythonEnv()
+{
+    const QString pyHome = resolveEmbeddedPythonHome();
+    if (pyHome.isEmpty()) {
+        return;
+    }
+
+    const QString stdlib = pyHome + "/lib/python3.11";
+    const QString dynload = stdlib + "/lib-dynload";
+    const QString site = stdlib + "/site-packages";
+    const QString pyPath = stdlib + ":" + dynload + ":" + site;
+
+    qputenv("PYTHONHOME", pyHome.toUtf8());
+    qputenv("PYTHONPATH", pyPath.toUtf8());
+}
+
+static PyObject *pyQtAppName(PyObject *, PyObject *)
+{
+    auto *app = QCoreApplication::instance();
+    const QString name = app ? app->applicationName() : QString();
+    return PyUnicode_FromString(name.toUtf8().constData());
+}
+
+static PyObject *pyQtAppQuit(PyObject *, PyObject *)
+{
+    if (auto *app = QCoreApplication::instance()) {
+        QMetaObject::invokeMethod(app, "quit", Qt::QueuedConnection);
+    }
+    Py_RETURN_NONE;
+}
+
+static PyObject *pyQtAppProcessEvents(PyObject *, PyObject *)
+{
+    if (auto *app = QCoreApplication::instance()) {
+        app->processEvents();
+    }
+    Py_RETURN_NONE;
+}
+
+static PyObject *pyQtMainWindowPtr(PyObject *, PyObject *)
+{
+    const auto ptr = reinterpret_cast<qulonglong>(g_mainWindowForPython);
+    return PyLong_FromUnsignedLongLong(ptr);
+}
+
+static PyObject *pyQtAppPtr(PyObject *, PyObject *)
+{
+    const auto ptr = reinterpret_cast<qulonglong>(QCoreApplication::instance());
+    return PyLong_FromUnsignedLongLong(ptr);
+}
+
+static PyMethodDef kQtAppNameMethod = {
+    "_qt_app_name", pyQtAppName, METH_NOARGS, "Return Qt application name."
+};
+
+static PyMethodDef kQtAppQuitMethod = {
+    "_qt_app_quit", pyQtAppQuit, METH_NOARGS, "Quit Qt application."
+};
+
+static PyMethodDef kQtAppProcessEventsMethod = {
+    "_qt_app_process_events", pyQtAppProcessEvents, METH_NOARGS, "Process Qt events."
+};
+
+static PyMethodDef kQtMainWindowPtrMethod = {
+    "_qt_main_window_ptr", pyQtMainWindowPtr, METH_NOARGS, "Return MainWindow pointer as integer."
+};
+
+static PyMethodDef kQtAppPtrMethod = {
+    "_qt_app_ptr", pyQtAppPtr, METH_NOARGS, "Return QApplication pointer as integer."
+};
+
 // ---------- ctor / dtor ----------
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    g_mainWindowForPython = this;
     ui = new Ui::MainWindow;
     ui->setupUi(this);
     m_poseClock.start();
@@ -115,6 +215,8 @@ MainWindow::MainWindow(QWidget *parent)
     m_rulerTabIndex = m_rightTabs->indexOf(ui->rulerPage);
     m_colorPickerTabIndex = m_rightTabs->indexOf(m_tabColorPicker);
     m_rightTabs->setTabVisible(m_colorPickerTabIndex, false);
+    createPythonConsole();
+    startPythonInterpreter();  // Auto-start Python console at app launch
 
     // FPS label (added to status bar at runtime)
     m_fpsLabel = new QLabel("FPS: 0.0");
@@ -236,6 +338,10 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    if (g_mainWindowForPython == this) {
+        g_mainWindowForPython = nullptr;
+    }
+    stopPythonInterpreter();
     delete ui;
 }
 
@@ -310,12 +416,282 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     saveSettings();
     onStopClicked();
+    stopPythonInterpreter();
 
     if (m_cncControlPanel)
         m_cncControlPanel->stop();
     m_ledController->stop();
 
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::createPythonConsole()
+{
+    if (m_pythonEditor) {
+        return;
+    }
+
+    if (!ui || !ui->rulerPage) {
+        return;
+    }
+
+    auto *rulerLayout = qobject_cast<QVBoxLayout *>(ui->rulerPage->layout());
+    if (!rulerLayout) {
+        return;
+    }
+
+    auto *pythonGroup = new QGroupBox("Python IDE", ui->rulerPage);
+    auto *pythonLayout = new QVBoxLayout(pythonGroup);
+    m_pythonEditor = new PythonScintillaEditor(pythonGroup);
+    m_pythonEditor->setMinimumHeight(220);
+    pythonLayout->addWidget(m_pythonEditor);
+
+    // Place Python IDE at the bottom of the ruler page, above the spacer.
+    const int insertIndex = qMax(0, rulerLayout->count() - 1);
+    rulerLayout->insertWidget(insertIndex, pythonGroup);
+
+    // Connect the editor's commandReady signal to run Python code
+    connect(m_pythonEditor, QOverload<const QString &>::of(&PythonScintillaEditor::commandReady),
+            this, [this](const QString &command) {
+                runPythonCode(command);
+            });
+}
+
+void MainWindow::startPythonInterpreter()
+{
+    if (m_pythonInitialized) {
+        if (m_pythonEditor) {
+            m_pythonEditor->appendOutput("[Python] Interpreter already running.");
+        }
+        return;
+    }
+
+    configureEmbeddedPythonEnv();
+    Py_Initialize();
+    if (!Py_IsInitialized()) {
+        if (m_pythonEditor) {
+            m_pythonEditor->appendOutput("Failed to initialize embedded Python runtime.");
+        }
+        return;
+    }
+
+    m_pythonGlobals = PyDict_New();
+    if (!m_pythonGlobals) {
+        if (m_pythonEditor) {
+            m_pythonEditor->appendOutput("Failed to allocate Python globals dictionary.");
+        }
+        Py_FinalizeEx();
+        return;
+    }
+
+    PyObject *builtins = PyEval_GetBuiltins();
+    if (builtins) {
+        PyDict_SetItemString(m_pythonGlobals, "__builtins__", builtins);
+    }
+
+    PyObject *nameFn = PyCFunction_NewEx(&kQtAppNameMethod, nullptr, nullptr);
+    PyObject *quitFn = PyCFunction_NewEx(&kQtAppQuitMethod, nullptr, nullptr);
+    PyObject *processFn = PyCFunction_NewEx(&kQtAppProcessEventsMethod, nullptr, nullptr);
+    PyObject *mainWindowPtrFn = PyCFunction_NewEx(&kQtMainWindowPtrMethod, nullptr, nullptr);
+    PyObject *appPtrFn = PyCFunction_NewEx(&kQtAppPtrMethod, nullptr, nullptr);
+    if (nameFn) {
+        PyDict_SetItemString(m_pythonGlobals, "_qt_app_name", nameFn);
+        Py_DECREF(nameFn);
+    }
+    if (quitFn) {
+        PyDict_SetItemString(m_pythonGlobals, "_qt_app_quit", quitFn);
+        Py_DECREF(quitFn);
+    }
+    if (processFn) {
+        PyDict_SetItemString(m_pythonGlobals, "_qt_app_process_events", processFn);
+        Py_DECREF(processFn);
+    }
+    if (mainWindowPtrFn) {
+        PyDict_SetItemString(m_pythonGlobals, "_qt_main_window_ptr", mainWindowPtrFn);
+        Py_DECREF(mainWindowPtrFn);
+    }
+    if (appPtrFn) {
+        PyDict_SetItemString(m_pythonGlobals, "_qt_app_ptr", appPtrFn);
+        Py_DECREF(appPtrFn);
+    }
+
+    static const char *kAppProxyScript =
+        "import os, sys, glob\n"
+        "\n"
+        "def _append_venv_site_packages(base, venv_name):\n"
+        "    pattern = os.path.join(base, venv_name, 'lib', 'python*', 'site-packages')\n"
+        "    for p in glob.glob(pattern):\n"
+        "        if p not in sys.path:\n"
+        "            sys.path.insert(0, p)\n"
+        "\n"
+        "for _root in (os.getcwd(), os.path.abspath(os.path.join(os.getcwd(), '..'))):\n"
+        "    _append_venv_site_packages(_root, '.venv311')\n"
+        "    _append_venv_site_packages(_root, '.venv_sys')\n"
+        "    _append_venv_site_packages(_root, '.venv')\n"
+        "\n"
+        "try:\n"
+        "    from PySide6 import QtCore, QtWidgets\n"
+        "    import shiboken6\n"
+        "    qapp = shiboken6.wrapInstance(int(_qt_app_ptr()), QtWidgets.QApplication)\n"
+        "    main_window = shiboken6.wrapInstance(int(_qt_main_window_ptr()), QtWidgets.QMainWindow)\n"
+        "\n"
+        "    class _QtAppProxy:\n"
+        "        def name(self):\n"
+        "            return _qt_app_name()\n"
+        "        def quit(self):\n"
+        "            return _qt_app_quit()\n"
+        "        def process_events(self):\n"
+        "            return _qt_app_process_events()\n"
+        "        @property\n"
+        "        def qt_app(self):\n"
+        "            return qapp\n"
+        "        @property\n"
+        "        def main_window(self):\n"
+        "            return main_window\n"
+        "        def find_child(self, name):\n"
+        "            return main_window.findChild(QtCore.QObject, name)\n"
+        "        def children(self):\n"
+        "            return main_window.findChildren(QtCore.QObject)\n"
+        "\n"
+        "    app = _QtAppProxy()\n"
+        "except Exception as e:\n"
+        "    class _FallbackProxy:\n"
+        "        def name(self):\n"
+        "            return _qt_app_name()\n"
+        "        def quit(self):\n"
+        "            return _qt_app_quit()\n"
+        "        def process_events(self):\n"
+        "            return _qt_app_process_events()\n"
+        "\n"
+        "    app = _FallbackProxy()\n"
+        "    print(f'[Python] PySide6 bootstrap failed: {e}')\n";
+    PyObject *proxyResult = PyRun_StringFlags(
+        kAppProxyScript,
+        Py_file_input,
+        m_pythonGlobals,
+        m_pythonGlobals,
+        nullptr);
+    if (!proxyResult) {
+        if (m_pythonEditor) {
+            m_pythonEditor->appendOutput("[Python] Failed to initialize app proxy.");
+        }
+        PyErr_Clear();
+    } else {
+        Py_DECREF(proxyResult);
+    }
+
+    m_pythonInitialized = true;
+
+    if (m_pythonEditor) {
+        m_pythonEditor->appendOutput("[Python] Embedded interpreter started. Available: app, app.main_window, app.qt_app, app.find_child(name)");
+        m_pythonEditor->showPrompt();
+    }
+}
+
+void MainWindow::stopPythonInterpreter()
+{
+    if (!m_pythonInitialized) {
+        return;
+    }
+
+    if (m_pythonGlobals) {
+        Py_DECREF(m_pythonGlobals);
+        m_pythonGlobals = nullptr;
+    }
+
+    if (Py_IsInitialized()) {
+        Py_FinalizeEx();
+    }
+    m_pythonInitialized = false;
+
+    if (m_pythonEditor) {
+        m_pythonEditor->appendOutput("[Python] Embedded interpreter stopped.");
+        m_pythonEditor->resetEditor();
+    }
+}
+
+void MainWindow::runPythonCode(const QString &command)
+{
+    if (!m_pythonInitialized || !m_pythonGlobals || !m_pythonEditor) {
+        if (m_pythonEditor) {
+            m_pythonEditor->appendOutput("Start Python first.");
+        }
+        return;
+    }
+
+    const QString code = command.trimmed();
+    if (code.isEmpty()) {
+        return;
+    }
+
+    QByteArray codeUtf8 = code.toUtf8();
+    PyObject *codeObj = PyUnicode_FromString(codeUtf8.constData());
+    if (!codeObj) {
+        m_pythonEditor->appendOutput("[Python] Failed to convert code to Unicode.");
+        PyErr_Clear();
+        return;
+    }
+
+    PyDict_SetItemString(m_pythonGlobals, "__qt_code", codeObj);
+    PyDict_SetItemString(m_pythonGlobals, "__qt_globals", m_pythonGlobals);
+    Py_DECREF(codeObj);
+
+    // Try to evaluate as expression first (like REPL), then fall back to exec() for statements
+    static const char *kExecScript =
+        "import io, contextlib, traceback\n"
+        "__qt_out_buf = io.StringIO()\n"
+        "__qt_err_buf = io.StringIO()\n"
+        "with contextlib.redirect_stdout(__qt_out_buf), contextlib.redirect_stderr(__qt_err_buf):\n"
+        "    try:\n"
+        "        # Try eval() first to capture expression results\n"
+        "        __qt_result = eval(__qt_code, __qt_globals)\n"
+        "        # In REPL, print non-None results (like 42, 'hello', [1,2,3])\n"
+        "        if __qt_result is not None:\n"
+        "            print(repr(__qt_result))\n"
+        "    except SyntaxError:\n"
+        "        # If eval fails (statements like assignments, loops), try exec\n"
+        "        try:\n"
+        "            exec(__qt_code, __qt_globals, __qt_globals)\n"
+        "        except Exception:\n"
+        "            traceback.print_exc()\n"
+        "    except Exception:\n"
+        "        # eval() raised runtime error\n"
+        "        traceback.print_exc()\n"
+        "__qt_out = __qt_out_buf.getvalue()\n"
+        "__qt_err = __qt_err_buf.getvalue()\n";
+
+    PyObject *result = PyRun_StringFlags(
+        kExecScript,
+        Py_file_input,
+        m_pythonGlobals,
+        m_pythonGlobals,
+        nullptr);
+
+    if (!result) {
+        m_pythonEditor->appendOutput("[Python] Internal execution wrapper failed.");
+        PyErr_Clear();
+    } else {
+        Py_DECREF(result);
+
+        PyObject *outObj = PyDict_GetItemString(m_pythonGlobals, "__qt_out");
+        if (outObj && PyUnicode_Check(outObj)) {
+            const char *outText = PyUnicode_AsUTF8(outObj);
+            if (outText && outText[0] != '\0') {
+                m_pythonEditor->appendOutput(QString::fromUtf8(outText));
+            }
+        }
+
+        PyObject *errObj = PyDict_GetItemString(m_pythonGlobals, "__qt_err");
+        if (errObj && PyUnicode_Check(errObj)) {
+            const char *errText = PyUnicode_AsUTF8(errObj);
+            if (errText && errText[0] != '\0') {
+                m_pythonEditor->appendOutput(QString::fromUtf8(errText));
+            }
+        }
+    }
+
+    PyDict_DelItemString(m_pythonGlobals, "__qt_code");
+    PyDict_DelItemString(m_pythonGlobals, "__qt_globals");
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)

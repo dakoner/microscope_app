@@ -8,6 +8,48 @@
 #include <QCoreApplication>
 #include <QStandardPaths>
 #include <QFileInfo>
+#include <QProcessEnvironment>
+#include <QDir>
+
+static QString resolveEmbeddedPythonExecutable()
+{
+    const QStringList candidates = {
+        "/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/bin/python3.11",
+        "/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/bin/python3",
+        "/home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3"
+    };
+    for (const QString &path : candidates) {
+        if (QFileInfo::exists(path)) {
+            return path;
+        }
+    }
+    return "python3";  // Fallback to system python3
+}
+
+static QString resolveYoloPythonExecutable(const QString &scriptPath)
+{
+    const QString scriptDir = QFileInfo(scriptPath).absolutePath();
+    const QString venvEnv = qEnvironmentVariable("VIRTUAL_ENV");
+
+    const QStringList candidates = {
+        scriptDir + "/.venv/bin/python3",
+        scriptDir + "/.venv/bin/python",
+        scriptDir + "/.venv311/bin/python3",
+        scriptDir + "/.venv311/bin/python",
+        scriptDir + "/.venv_sys/bin/python3",
+        scriptDir + "/.venv_sys/bin/python",
+        venvEnv.isEmpty() ? QString() : venvEnv + "/bin/python3",
+        venvEnv.isEmpty() ? QString() : venvEnv + "/bin/python"
+    };
+
+    for (const QString &path : candidates) {
+        if (!path.isEmpty() && QFileInfo::exists(path)) {
+            return path;
+        }
+    }
+
+    return resolveEmbeddedPythonExecutable();
+}
 
 YOLOInferenceWorker::YOLOInferenceWorker(QObject *parent)
     : QObject(parent)
@@ -65,9 +107,38 @@ void YOLOInferenceWorker::start()
         return;
     }
 
-    // Start Python subprocess
+    // Start Python subprocess with environment that matches available packages
+    QString pythonExe = resolveYoloPythonExecutable(scriptPath);
+    
+    // Set up environment for the subprocess
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    QString pyHome = "/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu";
+    if (!QDir(pyHome).exists()) {
+        pyHome = "/home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu";
+    }
+    
+    const bool usingEmbeddedPython = pythonExe.startsWith("/home/davidek/.local/share/uv/python/");
+
+    if (usingEmbeddedPython && QDir(pyHome).exists()) {
+        QString stdlib = pyHome + "/lib/python3.11";
+        QString dynload = stdlib + "/lib-dynload";
+        QString site = stdlib + "/site-packages";
+        QString pyPath = stdlib + ":" + dynload + ":" + site;
+        
+        env.insert("PYTHONHOME", pyHome);
+        env.insert("PYTHONPATH", pyPath);
+        // Ensure consistent Python environment
+        env.insert("PYTHONDONTWRITEBYTECODE", "1");
+    } else {
+        // Let venv/system Python manage its own stdlib and site-packages.
+        env.remove("PYTHONHOME");
+        env.remove("PYTHONPATH");
+    }
+    
+    m_process->setProcessEnvironment(env);
+    
     QStringList args = {scriptPath};
-    m_process->start("python3", args);
+    m_process->start(pythonExe, args);
 
     if (!m_process->waitForStarted()) {
         emit errorOccurred(QString("Failed to start inference process: %1").arg(m_process->errorString()));

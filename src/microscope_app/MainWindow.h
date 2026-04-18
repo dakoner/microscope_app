@@ -35,6 +35,9 @@ class MosaicPanel;
 class IntensityChart;
 class ScanConfigPanel;
 class ColorPickerWidget;
+class PythonScintillaEditor;
+struct _object;
+typedef _object PyObject;
 
 // Include for Detection struct (needed for std::vector<Detection>)
 #include "YOLOInferenceWorker.h"
@@ -95,6 +98,11 @@ private slots:
     void onDetectionsReady(const std::vector<Detection> &detections);
     void onYoloError(const QString &message);
 
+    // Python console
+    void startPythonInterpreter();
+    void stopPythonInterpreter();
+    void runPythonCode(const QString &command);
+
     // Ruler / Measurement
     void onRulerToggled(bool checked);
     void calibrateRuler();
@@ -119,6 +127,7 @@ private slots:
 
 private:
     void connectSignals();
+    void createPythonConsole();
     void toggleCenterViewTab();
     void repositionPipOverlays();
     void startScanRowRecording(int rowNumber);
@@ -196,6 +205,11 @@ private:
     bool m_yoloInferenceActive = false;
     float m_yoloConfThreshold = 0.5f;
     QAction *m_actionYoloInference = nullptr;
+
+    // Python interpreter console
+    bool m_pythonInitialized = false;
+    PyObject *m_pythonGlobals = nullptr;
+    PythonScintillaEditor *m_pythonEditor = nullptr;
 
     // Ruler / Measurement
     bool m_rulerActive = false;
