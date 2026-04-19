@@ -37,7 +37,14 @@ INCLUDEPATH += \
     src/microscope_app \
     $$MVSDK_INCLUDE \
     src/mindvision_qobject/src \
+    src/cnc_control_panel_qobject/src \
     src/serial_qobject/src \
+    src/led_controller_qobject/src \
+    src/color_picker_widget_qobject/src \
+    src/intensity_chart_qobject/src \
+    src/mosaic_panel_qobject/src \
+    src/editor_qobject/src \
+    src/scan_config_paneL_qobject/src \
     src/yolo_inference_qobject/src
 
 # Library paths
@@ -89,30 +96,30 @@ DEFINES += MINDVISION_QOBJECT_LIBRARY
 SOURCES += \
     src/microscope_app/main.cpp \
     src/microscope_app/MainWindow.cpp \
-    src/microscope_app/CNCControlPanel.cpp \
-    src/microscope_app/MosaicWidget.cpp \
-    src/microscope_app/MosaicPanel.cpp \
-    src/microscope_app/IntensityChart.cpp \
-    src/microscope_app/ColorPickerWidget.cpp \
-    src/microscope_app/LEDController.cpp \
-    src/microscope_app/ScanConfigPanel.cpp \
+    src/cnc_control_panel_qobject/src/CNCControlPanel.cpp \
+    src/mosaic_panel_qobject/src/MosaicWidget.cpp \
+    src/mosaic_panel_qobject/src/MosaicPanel.cpp \
+    src/intensity_chart_qobject/src/IntensityChart.cpp \
+    src/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
+    src/led_controller_qobject/src/LEDController.cpp \
+    src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
     src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
-    src/microscope_app/PythonScintillaEditor.cpp \
+    src/editor_qobject/src/PythonScintillaEditor.cpp \
     src/mindvision_qobject/src/MindVisionCamera.cpp \
     src/mindvision_qobject/src/VideoThread.cpp \
     src/serial_qobject/src/SerialWorker.cpp
 
 HEADERS += \
     src/microscope_app/MainWindow.h \
-    src/microscope_app/CNCControlPanel.h \
-    src/microscope_app/MosaicWidget.h \
-    src/microscope_app/MosaicPanel.h \
-    src/microscope_app/IntensityChart.h \
-    src/microscope_app/ColorPickerWidget.h \
-    src/microscope_app/LEDController.h \
-    src/microscope_app/ScanConfigPanel.h \
+    src/cnc_control_panel_qobject/src/CNCControlPanel.h \
+    src/mosaic_panel_qobject/src/MosaicWidget.h \
+    src/mosaic_panel_qobject/src/MosaicPanel.h \
+    src/intensity_chart_qobject/src/IntensityChart.h \
+    src/color_picker_widget_qobject/src/ColorPickerWidget.h \
+    src/led_controller_qobject/src/LEDController.h \
+    src/scan_config_paneL_qobject/src/ScanConfigPanel.h \
     src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
-    src/microscope_app/PythonScintillaEditor.h \
+    src/editor_qobject/src/PythonScintillaEditor.h \
     src/mindvision_qobject/src/MindVisionCamera.h \
     src/mindvision_qobject/src/VideoThread.h \
     src/mindvision_qobject/src/mindvision_qobject_global.h \
