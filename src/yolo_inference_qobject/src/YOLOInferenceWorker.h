@@ -15,7 +15,7 @@ struct Detection {
 /**
  * YOLOInferenceWorker: Runs YOLO inference in a background thread.
  *
- * Uses a TorchScript model loaded through LibTorch.
+ * Uses a TensorRT engine loaded through the TensorRT runtime.
  */
 class YOLOInferenceWorker : public QObject
 {
@@ -61,6 +61,7 @@ private:
     // Frame skip counter
     int m_frameSkipCounter = 0;
     int m_frameSkipRate = 1;  // Process every Nth frame
+    uint64_t m_processedFrameIndex = 0;
 };
 
 #endif // YOLOINFERENCEWORKER_H

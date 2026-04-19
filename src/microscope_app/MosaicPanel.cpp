@@ -56,11 +56,8 @@ MosaicPanel::MosaicPanel(double stageWidthMm, double stageHeightMm,
 
     // Tiles are allocated lazily in updateMosaic() when the camera first writes to them.
 
-    // Draw a circle at the center of the stage
-    double centerX = m_mosaicWidthPx / 2.0;
-    double centerY = m_mosaicHeightPx / 2.0;
-    double radius = std::min(m_mosaicWidthPx, m_mosaicHeightPx) / 2.0;
-    m_displayWidget->setOverlayCircles({{QPointF(centerX, centerY), radius}});
+    // Default target overlay: 15 mm diameter circle centered at (48, 48) mm.
+    setStageCircles({std::make_tuple(48.0, 48.0, 7.5)});
 
     connect(m_displayWidget, &MosaicWidget::clicked, this, &MosaicPanel::onMosaicClicked);
     connect(m_displayWidget, &MosaicWidget::selectionsChanged, this, &MosaicPanel::onSelectionsChanged);

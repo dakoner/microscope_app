@@ -234,7 +234,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     // YOLO Inference Worker
     m_yoloWorker = new YOLOInferenceWorker(this);
-    m_yoloWorker->start();
 
     // Create YOLO inference toggle action
     m_actionYoloInference = new QAction("YOLO Inference", this);
@@ -276,6 +275,13 @@ MainWindow::MainWindow(QWidget *parent)
     QTimer::singleShot(0, this, &MainWindow::repositionPipOverlays);
 
     connectSignals();
+
+    if (m_yoloWorker) {
+        m_yoloWorker->start();
+        if (!m_yoloWorker->isRunning()) {
+            log("YOLO worker failed to start at initialization. Toggle YOLO to retry.");
+        }
+    }
 
     // Camera & video
     m_camera = new MindVisionCamera(this);
@@ -1393,6 +1399,17 @@ void MainWindow::onYoloToggled(bool checked)
 {
     m_yoloInferenceActive = checked;
     if (checked) {
+        if (m_yoloWorker && !m_yoloWorker->isRunning()) {
+            m_yoloWorker->start();
+            if (!m_yoloWorker->isRunning()) {
+                log("YOLO inference could not start. Check model path and TensorRT runtime.");
+                m_yoloInferenceActive = false;
+                if (m_actionYoloInference) {
+                    m_actionYoloInference->setChecked(false);
+                }
+                return;
+            }
+        }
         log("YOLO inference started");
     } else {
         log("YOLO inference stopped");
