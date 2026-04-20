@@ -50,18 +50,38 @@ INCLUDEPATH += \
     $$SRC_DIR/scan_config_paneL_qobject/src \
     $$SRC_DIR/yolo_inference_qobject/src
 
-# Python + pybind11 headers
-PYTHON_BIN = /home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11
-PYTHON_CONFIG = /home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11-config
-PY_CFLAGS = $$system($$PYTHON_CONFIG --includes)
+# Python + pybind11 headers (prefer project .venv)
+PYTHON_BIN = $$PWD/.venv/bin/python
+!exists($$PYTHON_BIN): PYTHON_BIN = $$system(command -v python3)
+isEmpty(PYTHON_BIN): PYTHON_BIN = python3
+
+PYTHON_REAL = $$system(readlink -f $$PYTHON_BIN)
+PYTHON_CONFIG = $$PYTHON_REAL-config
+!exists($$PYTHON_CONFIG): PYTHON_CONFIG = $$PWD/.venv/bin/python3-config
+!exists($$PYTHON_CONFIG): PYTHON_CONFIG = $$system(command -v python3-config)
+isEmpty(PYTHON_CONFIG): PYTHON_CONFIG = python3-config
+
+PY_CFLAGS = $$system($$PYTHON_CONFIG --includes 2>/dev/null)
+isEmpty(PY_CFLAGS): PY_CFLAGS = $$system($$PYTHON_BIN -c "import sysconfig; print('-I' + sysconfig.get_paths()['include'])")
+
 PY_LDFLAGS = $$system($$PYTHON_CONFIG --embed --ldflags 2>/dev/null)
-isEmpty(PY_LDFLAGS): PY_LDFLAGS = $$system($$PYTHON_CONFIG --ldflags)
+isEmpty(PY_LDFLAGS): PY_LDFLAGS = $$system($$PYTHON_CONFIG --ldflags 2>/dev/null)
 QMAKE_CXXFLAGS += $$PY_CFLAGS
 LIBS += $$PY_LDFLAGS
 
 PYBIND11_INCLUDES = $$system($$PYTHON_BIN -m pybind11 --includes 2>/dev/null)
 !isEmpty(PYBIND11_INCLUDES) {
     QMAKE_CXXFLAGS += $$PYBIND11_INCLUDES
+}
+
+# Prefer the same Qt runtime shipped with project .venv PySide6 to avoid
+# mixing with system Qt libraries at import time.
+PYSIDE_QT_LIB = $$PWD/.venv/lib/python3.11/site-packages/PySide6/Qt/lib
+!exists($$PYSIDE_QT_LIB/libQt6Core.so.6): PYSIDE_QT_LIB = $$PWD/.venv/lib/python3.12/site-packages/PySide6/Qt/lib
+
+exists($$PYSIDE_QT_LIB/libQt6Core.so.6) {
+    QMAKE_LFLAGS += -Wl,-rpath,$$PYSIDE_QT_LIB
+    message(Using PySide6 Qt runtime at $$PYSIDE_QT_LIB)
 }
 
 # TensorRT + CUDA runtime

@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QLineEdit>
 #include <QSpinBox>
 #include <QSlider>
 #include <QPushButton>
@@ -208,6 +209,7 @@ private:
 
     // Python interpreter console
     bool m_pythonInitialized = false;
+    bool m_pythonHostedExternally = false;
     PyObject *m_pythonGlobals = nullptr;
     PythonScintillaEditor *m_pythonEditor = nullptr;
 
@@ -282,7 +284,7 @@ private:
     QTabWidget *m_rightTabs = nullptr;
 
     // Ruler
-    QSpinBox *m_spinRulerLen = nullptr;
+    QLineEdit *m_editRulerLen = nullptr;
     QLabel *m_lblRulerPx = nullptr;
     QLabel *m_lblRulerCalib = nullptr;
     QLabel *m_lblRulerMeas = nullptr;

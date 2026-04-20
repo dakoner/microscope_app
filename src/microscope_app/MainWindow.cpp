@@ -142,6 +142,9 @@ static PyMethodDef kQtAppPtrMethod = {
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    m_pythonHostedExternally = qEnvironmentVariableIsSet("MICROSCOPE_PY_HOSTED")
+        && qEnvironmentVariableIntValue("MICROSCOPE_PY_HOSTED") != 0;
+
     g_mainWindowForPython = this;
     ui = new Ui::MainWindow;
     ui->setupUi(this);
@@ -183,7 +186,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_spinStrobeWidth = ui->m_spinStrobeWidth;
     m_cncControlPanel = ui->m_cncControlPanel;
     m_rightTabs = ui->m_rightTabs;
-    m_spinRulerLen = ui->m_spinRulerLen;
+    m_editRulerLen = ui->m_editRulerLen;
     m_lblRulerPx = ui->m_lblRulerPx;
     m_lblRulerCalib = ui->m_lblRulerCalib;
     m_lblRulerMeas = ui->m_lblRulerMeas;
@@ -216,7 +219,12 @@ MainWindow::MainWindow(QWidget *parent)
     m_colorPickerTabIndex = m_rightTabs->indexOf(m_tabColorPicker);
     m_rightTabs->setTabVisible(m_colorPickerTabIndex, false);
     createPythonConsole();
-    startPythonInterpreter();  // Auto-start Python console at app launch
+    if (!m_pythonHostedExternally) {
+        startPythonInterpreter();  // Auto-start Python console at app launch
+    } else if (m_pythonEditor) {
+        m_pythonEditor->appendOutput("[Python] Hosted by external Python process.");
+        m_pythonEditor->showPrompt();
+    }
 
     // FPS label (added to status bar at runtime)
     m_fpsLabel = new QLabel("FPS: 0.0");
@@ -347,7 +355,9 @@ MainWindow::~MainWindow()
     if (g_mainWindowForPython == this) {
         g_mainWindowForPython = nullptr;
     }
-    stopPythonInterpreter();
+    if (!m_pythonHostedExternally) {
+        stopPythonInterpreter();
+    }
     delete ui;
 }
 
@@ -422,7 +432,9 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     saveSettings();
     onStopClicked();
-    stopPythonInterpreter();
+    if (!m_pythonHostedExternally) {
+        stopPythonInterpreter();
+    }
 
     if (m_cncControlPanel)
         m_cncControlPanel->stop();
@@ -465,6 +477,13 @@ void MainWindow::createPythonConsole()
 
 void MainWindow::startPythonInterpreter()
 {
+    if (m_pythonHostedExternally) {
+        if (m_pythonEditor) {
+            m_pythonEditor->appendOutput("[Python] Embedded interpreter disabled in hosted mode.");
+        }
+        return;
+    }
+
     if (m_pythonInitialized) {
         if (m_pythonEditor) {
             m_pythonEditor->appendOutput("[Python] Interpreter already running.");
@@ -596,6 +615,10 @@ void MainWindow::startPythonInterpreter()
 
 void MainWindow::stopPythonInterpreter()
 {
+    if (m_pythonHostedExternally) {
+        return;
+    }
+
     if (!m_pythonInitialized) {
         return;
     }
@@ -1317,8 +1340,8 @@ void MainWindow::calibrateRuler()
     QLineF line(m_rulerStart, m_rulerEnd);
     double pxDist = line.length();
     if (pxDist < 1.0) { log("Ruler: Line too short to calibrate."); return; }
-    int knownMm = m_spinRulerLen->value();
-    if (knownMm <= 0) return;
+    double knownMm = m_editRulerLen->text().toDouble();
+    if (knownMm <= 0.0) return;
     m_rulerCalibration = pxDist / knownMm;
     m_lblRulerCalib->setText(QString("%1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
     log(QString("Ruler Calibrated: %1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));

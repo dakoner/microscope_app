@@ -1,15 +1,27 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
+from pathlib import Path
 import os
 import sys
 
-REQUIRED_MM = (3, 11)
-PY311 = "/home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11"
-
-if sys.version_info[:2] != REQUIRED_MM and os.path.exists(PY311):
-    os.execv(PY311, [PY311, *sys.argv])
-
 # Hosted mode tells MainWindow to skip embedded CPython init/finalize.
 os.environ["MICROSCOPE_PY_HOSTED"] = "1"
+
+
+def _configure_qt_runtime_from_pyside6() -> None:
+    # Resolve PySide6's bundled Qt locations and prefer them for plugins.
+    import PySide6
+
+    pyside_root = Path(PySide6.__file__).resolve().parent
+    qt_root = pyside_root / "Qt"
+    plugins_dir = qt_root / "plugins"
+
+    if plugins_dir.is_dir():
+        os.environ.setdefault("QT_PLUGIN_PATH", str(plugins_dir))
+
+
+_configure_qt_runtime_from_pyside6()
 
 from PySide6.QtWidgets import QApplication, QMainWindow
 import shiboken6
