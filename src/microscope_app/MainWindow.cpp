@@ -19,6 +19,7 @@
 #include <QMenuBar>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QTextCursor>
 #include <QPainter>
 #include <QPen>
 #include <QColor>
@@ -31,6 +32,8 @@
 #include <QDateTime>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <Qsci/qsciscintilla.h>
+#include <Qsci/qscilexerpython.h>
 
 #include <cmath>
 #include <ctime>
@@ -85,6 +88,60 @@ static QString resolveOutputBaseDir()
     }
 
     return QDir(cwd).absoluteFilePath("videos");
+}
+
+static void appendPlainTextBlock(QPlainTextEdit *widget, const QString &text)
+{
+    if (!widget) {
+        return;
+    }
+
+    QTextCursor cursor = widget->textCursor();
+    cursor.movePosition(QTextCursor::End);
+    widget->setTextCursor(cursor);
+    widget->insertPlainText(text);
+    if (!text.endsWith('\n')) {
+        widget->insertPlainText("\n");
+    }
+    widget->ensureCursorVisible();
+}
+
+static void setupPythonScriptEditor(QsciScintilla *editor)
+{
+    if (!editor) {
+        return;
+    }
+
+    editor->setUtf8(true);
+    editor->setWrapMode(QsciScintilla::WrapNone);
+    editor->setTabWidth(4);
+    editor->setIndentationsUseTabs(false);
+    editor->setAutoIndent(true);
+    editor->setBackspaceUnindents(true);
+    editor->setCaretLineVisible(true);
+    editor->setCaretLineBackgroundColor(QColor("#2d2d2d"));
+    editor->setCaretForegroundColor(QColor("#d4d4d4"));
+    editor->setMarginType(0, QsciScintilla::NumberMargin);
+    editor->setMarginWidth(0, "9999");
+    editor->setPaper(QColor("#1e1e1e"));
+    editor->setColor(QColor("#d4d4d4"));
+    editor->setSelectionForegroundColor(QColor("#d4d4d4"));
+    editor->setSelectionBackgroundColor(QColor("#264f78"));
+
+    QFont font("Courier", 10);
+    font.setStyleStrategy(QFont::PreferAntialias);
+    editor->setFont(font);
+
+    auto *lexer = new QsciLexerPython(editor);
+    lexer->setDefaultPaper(QColor("#1e1e1e"));
+    lexer->setDefaultColor(QColor("#d4d4d4"));
+    lexer->setColor(QColor("#569cd6"), QsciLexerPython::Keyword);
+    lexer->setColor(QColor("#dcdcaa"), QsciLexerPython::DoubleQuotedString);
+    lexer->setColor(QColor("#dcdcaa"), QsciLexerPython::SingleQuotedString);
+    lexer->setColor(QColor("#4ec9b0"), QsciLexerPython::ClassName);
+    lexer->setColor(QColor("#4ec9b0"), QsciLexerPython::FunctionMethodName);
+    lexer->setColor(QColor("#6a9955"), QsciLexerPython::Comment);
+    editor->setLexer(lexer);
 }
 
 static QString resolveEmbeddedPythonHome()
@@ -254,12 +311,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_colorPickerTabIndex = m_rightTabs->indexOf(m_tabColorPicker);
     m_rightTabs->setTabVisible(m_colorPickerTabIndex, false);
     createPythonConsole();
-    if (!m_pythonHostedExternally) {
-        startPythonInterpreter();  // Auto-start Python console at app launch
-    } else if (m_pythonEditor) {
-        m_pythonEditor->appendOutput("[Python] Hosted by external Python process.");
-        m_pythonEditor->showPrompt();
-    }
+    startPythonInterpreter();
 
     // FPS label (added to status bar at runtime)
     m_fpsLabel = new QLabel("FPS: 0.0");
@@ -495,9 +547,45 @@ void MainWindow::createPythonConsole()
 
     auto *pythonGroup = new QGroupBox("Python IDE", ui->rulerPage);
     auto *pythonLayout = new QVBoxLayout(pythonGroup);
-    m_pythonEditor = new PythonScintillaEditor(pythonGroup);
+    m_pythonIdeTabs = new QTabWidget(pythonGroup);
+    pythonLayout->addWidget(m_pythonIdeTabs);
+
+    auto *replTab = new QWidget(m_pythonIdeTabs);
+    auto *replLayout = new QVBoxLayout(replTab);
+    replLayout->setContentsMargins(0, 0, 0, 0);
+    m_pythonEditor = new PythonScintillaEditor(replTab);
     m_pythonEditor->setMinimumHeight(220);
-    pythonLayout->addWidget(m_pythonEditor);
+    replLayout->addWidget(m_pythonEditor);
+    m_pythonIdeTabs->addTab(replTab, "Console");
+
+    auto *scriptTab = new QWidget(m_pythonIdeTabs);
+    auto *scriptLayout = new QVBoxLayout(scriptTab);
+    scriptLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto *scriptToolbar = new QHBoxLayout;
+    auto *openButton = new QPushButton("Open Script", scriptTab);
+    auto *runButton = new QPushButton("Run Script", scriptTab);
+    m_pythonScriptPathLabel = new QLabel("Unsaved buffer", scriptTab);
+    m_pythonScriptPathLabel->setWordWrap(true);
+    scriptToolbar->addWidget(openButton);
+    scriptToolbar->addWidget(runButton);
+    scriptToolbar->addWidget(m_pythonScriptPathLabel, 1);
+    scriptLayout->addLayout(scriptToolbar);
+
+    m_pythonScriptEditor = new QsciScintilla(scriptTab);
+    setupPythonScriptEditor(m_pythonScriptEditor);
+    m_pythonScriptEditor->setMinimumHeight(260);
+    scriptLayout->addWidget(m_pythonScriptEditor, 1);
+
+    m_pythonScriptOutput = new QPlainTextEdit(scriptTab);
+    m_pythonScriptOutput->setReadOnly(true);
+    m_pythonScriptOutput->setPlaceholderText("Script output will appear here.");
+    m_pythonScriptOutput->setMinimumHeight(120);
+    scriptLayout->addWidget(m_pythonScriptOutput);
+    m_pythonIdeTabs->addTab(scriptTab, "Script");
+
+    connect(openButton, &QPushButton::clicked, this, &MainWindow::loadPythonScriptFromDisk);
+    connect(runButton, &QPushButton::clicked, this, &MainWindow::runPythonScriptEditorContents);
 
     // Place Python IDE at the bottom of the ruler page, above the spacer.
     const int insertIndex = qMax(0, rulerLayout->count() - 1);
@@ -512,13 +600,6 @@ void MainWindow::createPythonConsole()
 
 void MainWindow::startPythonInterpreter()
 {
-    if (m_pythonHostedExternally) {
-        if (m_pythonEditor) {
-            m_pythonEditor->appendOutput("[Python] Embedded interpreter disabled in hosted mode.");
-        }
-        return;
-    }
-
     if (m_pythonInitialized) {
         if (m_pythonEditor) {
             m_pythonEditor->appendOutput("[Python] Interpreter already running.");
@@ -526,21 +607,29 @@ void MainWindow::startPythonInterpreter()
         return;
     }
 
-    configureEmbeddedPythonEnv();
-    Py_Initialize();
+    if (!m_pythonHostedExternally) {
+        configureEmbeddedPythonEnv();
+        Py_Initialize();
+    }
+
     if (!Py_IsInitialized()) {
         if (m_pythonEditor) {
-            m_pythonEditor->appendOutput("Failed to initialize embedded Python runtime.");
+            m_pythonEditor->appendOutput("Failed to initialize Python runtime.");
         }
         return;
     }
+
+    PyGILState_STATE gilState = PyGILState_Ensure();
 
     m_pythonGlobals = PyDict_New();
     if (!m_pythonGlobals) {
         if (m_pythonEditor) {
             m_pythonEditor->appendOutput("Failed to allocate Python globals dictionary.");
         }
-        Py_FinalizeEx();
+        PyGILState_Release(gilState);
+        if (!m_pythonHostedExternally) {
+            Py_FinalizeEx();
+        }
         return;
     }
 
@@ -640,9 +729,14 @@ void MainWindow::startPythonInterpreter()
         Py_DECREF(proxyResult);
     }
 
+    PyGILState_Release(gilState);
+
     m_pythonInitialized = true;
 
     if (m_pythonEditor) {
+        if (m_pythonHostedExternally) {
+            m_pythonEditor->appendOutput("[Python] Hosted by external Python process.");
+        }
         m_pythonEditor->appendOutput("[Python] Embedded interpreter started. Available: app, app.main_window, app.qt_app, app.find_child(name)");
         m_pythonEditor->showPrompt();
     }
@@ -658,14 +752,18 @@ void MainWindow::stopPythonInterpreter()
         return;
     }
 
-    if (m_pythonGlobals) {
-        Py_DECREF(m_pythonGlobals);
-        m_pythonGlobals = nullptr;
+    if (Py_IsInitialized()) {
+        PyGILState_STATE gilState = PyGILState_Ensure();
+        if (m_pythonGlobals) {
+            Py_DECREF(m_pythonGlobals);
+            m_pythonGlobals = nullptr;
+        }
+        PyGILState_Release(gilState);
     }
 
-    if (Py_IsInitialized()) {
+    if (Py_IsInitialized())
         Py_FinalizeEx();
-    }
+
     m_pythonInitialized = false;
 
     if (m_pythonEditor) {
@@ -676,44 +774,54 @@ void MainWindow::stopPythonInterpreter()
 
 void MainWindow::runPythonCode(const QString &command)
 {
-    if (!m_pythonInitialized || !m_pythonGlobals || !m_pythonEditor) {
+    executePythonCode(command, [this](const QString &text) {
         if (m_pythonEditor) {
-            m_pythonEditor->appendOutput("Start Python first.");
+            m_pythonEditor->appendOutput(text);
         }
-        return;
+    });
+}
+
+bool MainWindow::executePythonCode(const QString &code,
+                                   const std::function<void(const QString &)> &appendOutput)
+{
+    if (!m_pythonInitialized || !m_pythonGlobals) {
+        if (appendOutput) {
+            appendOutput("Start Python first.");
+        }
+        return false;
     }
 
-    const QString code = command.trimmed();
-    if (code.isEmpty()) {
-        return;
+    if (code.trimmed().isEmpty()) {
+        return false;
     }
+
+    PyGILState_STATE gilState = PyGILState_Ensure();
 
     QByteArray codeUtf8 = code.toUtf8();
     PyObject *codeObj = PyUnicode_FromString(codeUtf8.constData());
     if (!codeObj) {
-        m_pythonEditor->appendOutput("[Python] Failed to convert code to Unicode.");
+        if (appendOutput) {
+            appendOutput("[Python] Failed to convert code to Unicode.");
+        }
         PyErr_Clear();
-        return;
+        PyGILState_Release(gilState);
+        return false;
     }
 
     PyDict_SetItemString(m_pythonGlobals, "__qt_code", codeObj);
     PyDict_SetItemString(m_pythonGlobals, "__qt_globals", m_pythonGlobals);
     Py_DECREF(codeObj);
 
-    // Try to evaluate as expression first (like REPL), then fall back to exec() for statements
     static const char *kExecScript =
         "import io, sys, contextlib, traceback\n"
         "__qt_out_buf = io.StringIO()\n"
         "__qt_err_buf = io.StringIO()\n"
         "with contextlib.redirect_stdout(__qt_out_buf), contextlib.redirect_stderr(__qt_err_buf):\n"
         "    try:\n"
-        "        # Try eval() first to capture expression results\n"
         "        __qt_result = eval(__qt_code, __qt_globals)\n"
-        "        # In REPL, print non-None results (like 42, 'hello', [1,2,3])\n"
         "        if __qt_result is not None:\n"
         "            print(repr(__qt_result))\n"
         "    except SyntaxError:\n"
-        "        # If eval fails (statements like assignments, loops), try exec\n"
         "        try:\n"
         "            exec(__qt_code, __qt_globals, __qt_globals)\n"
         "        except Exception:\n"
@@ -721,7 +829,6 @@ void MainWindow::runPythonCode(const QString &command)
         "            _tb = _etb.tb_next if _etb and _etb.tb_next else _etb\n"
         "            sys.stderr.write(''.join(traceback.format_exception(_et, _ev, _tb)))\n"
         "    except Exception:\n"
-        "        # eval() raised runtime error - skip the wrapper frame\n"
         "        _et, _ev, _etb = sys.exc_info()\n"
         "        _tb = _etb.tb_next if _etb and _etb.tb_next else _etb\n"
         "        sys.stderr.write(''.join(traceback.format_exception(_et, _ev, _tb)))\n"
@@ -736,7 +843,9 @@ void MainWindow::runPythonCode(const QString &command)
         nullptr);
 
     if (!result) {
-        m_pythonEditor->appendOutput("[Python] Internal execution wrapper failed.");
+        if (appendOutput) {
+            appendOutput("[Python] Internal execution wrapper failed.");
+        }
         PyErr_Clear();
     } else {
         Py_DECREF(result);
@@ -744,22 +853,76 @@ void MainWindow::runPythonCode(const QString &command)
         PyObject *outObj = PyDict_GetItemString(m_pythonGlobals, "__qt_out");
         if (outObj && PyUnicode_Check(outObj)) {
             const char *outText = PyUnicode_AsUTF8(outObj);
-            if (outText && outText[0] != '\0') {
-                m_pythonEditor->appendOutput(QString::fromUtf8(outText));
+            if (appendOutput && outText && outText[0] != '\0') {
+                appendOutput(QString::fromUtf8(outText));
             }
         }
 
         PyObject *errObj = PyDict_GetItemString(m_pythonGlobals, "__qt_err");
         if (errObj && PyUnicode_Check(errObj)) {
             const char *errText = PyUnicode_AsUTF8(errObj);
-            if (errText && errText[0] != '\0') {
-                m_pythonEditor->appendOutput(QString::fromUtf8(errText));
+            if (appendOutput && errText && errText[0] != '\0') {
+                appendOutput(QString::fromUtf8(errText));
             }
         }
     }
 
     PyDict_DelItemString(m_pythonGlobals, "__qt_code");
     PyDict_DelItemString(m_pythonGlobals, "__qt_globals");
+    PyGILState_Release(gilState);
+    return result != nullptr;
+}
+
+void MainWindow::appendPythonScriptOutput(const QString &text)
+{
+    appendPlainTextBlock(m_pythonScriptOutput, text);
+}
+
+void MainWindow::loadPythonScriptFromDisk()
+{
+    const QString startDir = m_pythonScriptPath.isEmpty()
+        ? QDir::currentPath()
+        : QFileInfo(m_pythonScriptPath).absolutePath();
+    const QString filename = QFileDialog::getOpenFileName(
+        this,
+        "Open Python Script",
+        startDir,
+        "Python Files (*.py);;All Files (*)");
+    if (filename.isEmpty()) {
+        return;
+    }
+
+    QFile file(filename);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        appendPythonScriptOutput(QString("[Python] Failed to open %1").arg(filename));
+        return;
+    }
+
+    const QString contents = QString::fromUtf8(file.readAll());
+    if (m_pythonScriptEditor) {
+        m_pythonScriptEditor->setText(contents);
+    }
+    m_pythonScriptPath = filename;
+    if (m_pythonScriptPathLabel) {
+        m_pythonScriptPathLabel->setText(m_pythonScriptPath);
+    }
+    appendPythonScriptOutput(QString("[Python] Loaded script: %1").arg(filename));
+}
+
+void MainWindow::runPythonScriptEditorContents()
+{
+    if (!m_pythonScriptEditor) {
+        return;
+    }
+
+    const QString code = m_pythonScriptEditor->text();
+    appendPythonScriptOutput(QString("[Python] Running %1")
+                                 .arg(m_pythonScriptPath.isEmpty() ? "editor buffer"
+                                                                   : m_pythonScriptPath));
+
+    executePythonCode(code, [this](const QString &text) {
+        appendPythonScriptOutput(text);
+    });
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)
@@ -1741,8 +1904,7 @@ void MainWindow::scanNextRow()
             m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(rowStartX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
         }
         m_cncControlPanel->sendCommand("G4 P0");
-        if (m_scanHomeX || m_scanHomeY)
-            m_cncControlPanel->sendCommand("__SCAN_ROW_START__");
+        m_cncControlPanel->sendCommand("__SCAN_ROW_START__");
         m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(rowEndX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
         m_cncControlPanel->sendCommand("G4 P0");
         m_cncControlPanel->sendCommand("__SCAN_ROW_END__");
@@ -1819,7 +1981,7 @@ void MainWindow::startScanRowRecording(int rowNumber)
     m_scanVideoThread->startRecording(m_currentImage.width(), m_currentImage.height(),
                                       recordFps, filename);
     m_scanRowRecordingActive = true;
-    m_scanRowCaptureEnabled = !(m_scanHomeX || m_scanHomeY);
+    m_scanRowCaptureEnabled = false;
     m_scanRecordingRowNumber = rowNumber;
     m_scanRowVideoFilename = QFileInfo(filename).fileName();
     m_scanRowRecordFps = recordFps;

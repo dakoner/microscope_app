@@ -19,8 +19,8 @@ public:
 
     void connect_serial(const std::string& port_name, int baud_rate);
     void disconnect_serial();
-    void send_command(const std::string& cmd);
-    void send_raw_command(const std::string& cmd);
+    bool send_command(const std::string& cmd);
+    bool send_raw_command(const std::string& cmd);
     void poll_serial();
 
 signals:

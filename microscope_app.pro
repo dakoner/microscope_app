@@ -7,6 +7,9 @@ QMAKE_LFLAGS += -Wl,--disable-new-dtags
 TARGET = microscope_app
 TEMPLATE = app
 
+SRC_DIR = $$PWD/src
+APP_DIR = $$SRC_DIR/microscope_app
+
 # QScintilla configuration
 QSCI_INCLUDE = /usr/include/x86_64-linux-gnu/qt6/Qsci
 QSCI_LIB = /usr/lib/x86_64-linux-gnu
@@ -29,37 +32,57 @@ CONFIG(debug, debug|release) {
 }
 
 # MindVision SDK
-MVSDK_INCLUDE = src/mindvision_qobject/Include
-MVSDK_LIB = src/mindvision_qobject/Lib
+MVSDK_INCLUDE = $$SRC_DIR/mindvision_qobject/Include
+MVSDK_LIB = $$SRC_DIR/mindvision_qobject/Lib
 
 # Include paths
 INCLUDEPATH += \
-    src/microscope_app \
+    $$APP_DIR \
     $$MVSDK_INCLUDE \
-    src/mindvision_qobject/src \
-    src/cnc_control_panel_qobject/src \
-    src/serial_qobject/src \
-    src/led_controller_qobject/src \
-    src/color_picker_widget_qobject/src \
-    src/intensity_chart_qobject/src \
-    src/mosaic_panel_qobject/src \
-    src/editor_qobject/src \
-    src/scan_config_paneL_qobject/src \
-    src/yolo_inference_qobject/src
+    $$SRC_DIR/mindvision_qobject/src \
+    $$SRC_DIR/cnc_control_panel_qobject/src \
+    $$SRC_DIR/serial_qobject/src \
+    $$SRC_DIR/led_controller_qobject/src \
+    $$SRC_DIR/color_picker_widget_qobject/src \
+    $$SRC_DIR/intensity_chart_qobject/src \
+    $$SRC_DIR/mosaic_panel_qobject/src \
+    $$SRC_DIR/editor_qobject/src \
+    $$SRC_DIR/scan_config_paneL_qobject/src \
+    $$SRC_DIR/yolo_inference_qobject/src
 
 # Library paths
 LIBS += -L$$MVSDK_LIB -lMVSDK
 
-# Embedded Python (CPython C API)
-PYTHON_CONFIG = /home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11-config
-PYTHON_BIN = /home/davidek/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11
-PY_LIBDIR = /home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib
-PY_CFLAGS = $$system($$PYTHON_CONFIG --includes)
+# Python + pybind11 headers
+PYTHON_BIN = $$PWD/.venv/bin/python
+!exists($$PYTHON_BIN): PYTHON_BIN = $$system(command -v python3)
+isEmpty(PYTHON_BIN): PYTHON_BIN = python3
+
+PYTHON_REAL = $$system(readlink -f $$PYTHON_BIN)
+PYTHON_CONFIG = $$PYTHON_REAL-config
+!exists($$PYTHON_CONFIG): PYTHON_CONFIG = $$PWD/.venv/bin/python3-config
+!exists($$PYTHON_CONFIG): PYTHON_CONFIG = $$system(command -v python3-config)
+isEmpty(PYTHON_CONFIG): PYTHON_CONFIG = python3-config
+
+PY_CFLAGS = $$system($$PYTHON_CONFIG --includes 2>/dev/null)
+isEmpty(PY_CFLAGS): PY_CFLAGS = $$system($$PYTHON_BIN -c "import sysconfig; print('-I' + sysconfig.get_paths()['include'])")
+
 PY_LDFLAGS = $$system($$PYTHON_CONFIG --embed --ldflags 2>/dev/null)
-isEmpty(PY_LDFLAGS): PY_LDFLAGS = $$system($$PYTHON_CONFIG --ldflags)
+isEmpty(PY_LDFLAGS): PY_LDFLAGS = $$system($$PYTHON_CONFIG --ldflags 2>/dev/null)
 QMAKE_CXXFLAGS += $$PY_CFLAGS
 LIBS += $$PY_LDFLAGS
-!isEmpty(PY_LIBDIR): QMAKE_LFLAGS += -Wl,-rpath,$$PY_LIBDIR
+
+PYBIND11_INCLUDES = $$system($$PYTHON_BIN -m pybind11 --includes 2>/dev/null)
+!isEmpty(PYBIND11_INCLUDES) {
+    QMAKE_CXXFLAGS += $$PYBIND11_INCLUDES
+}
+
+PYSIDE_QT_LIB = $$PWD/.venv/lib/python3.11/site-packages/PySide6/Qt/lib
+!exists($$PYSIDE_QT_LIB/libQt6Core.so.6): PYSIDE_QT_LIB = $$PWD/.venv/lib/python3.12/site-packages/PySide6/Qt/lib
+
+exists($$PYSIDE_QT_LIB/libQt6Core.so.6) {
+    QMAKE_LFLAGS += -Wl,-rpath,$$PYSIDE_QT_LIB
+}
 
 # TensorRT runtime (engine inference backend)
 TENSORRT_INCLUDE = /usr/include/x86_64-linux-gnu
@@ -92,38 +115,46 @@ exists($$CUDA_LIB/libcudart.so) {
 # Preprocessor definitions
 DEFINES += MINDVISION_QOBJECT_LIBRARY
 
-# Main application sources
+# Shared sources
 SOURCES += \
-    src/microscope_app/main.cpp \
-    src/microscope_app/MainWindow.cpp \
-    src/cnc_control_panel_qobject/src/CNCControlPanel.cpp \
-    src/mosaic_panel_qobject/src/MosaicWidget.cpp \
-    src/mosaic_panel_qobject/src/MosaicPanel.cpp \
-    src/intensity_chart_qobject/src/IntensityChart.cpp \
-    src/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
-    src/led_controller_qobject/src/LEDController.cpp \
-    src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
-    src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
-    src/editor_qobject/src/PythonScintillaEditor.cpp \
-    src/mindvision_qobject/src/MindVisionCamera.cpp \
-    src/mindvision_qobject/src/VideoThread.cpp \
-    src/serial_qobject/src/SerialWorker.cpp
+    $$APP_DIR/main.cpp \
+    $$APP_DIR/MainWindow.cpp \
+    $$APP_DIR/microscope_app_python.cpp \
+    $$SRC_DIR/cnc_control_panel_qobject/src/CNCControlPanel.cpp \
+    $$SRC_DIR/mosaic_panel_qobject/src/MosaicWidget.cpp \
+    $$SRC_DIR/mosaic_panel_qobject/src/MosaicPanel.cpp \
+    $$SRC_DIR/intensity_chart_qobject/src/IntensityChart.cpp \
+    $$SRC_DIR/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
+    $$SRC_DIR/led_controller_qobject/src/LEDController.cpp \
+    $$SRC_DIR/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
+    $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
+    $$SRC_DIR/editor_qobject/src/PythonScintillaEditor.cpp \
+    $$SRC_DIR/mindvision_qobject/src/MindVisionCamera.cpp \
+    $$SRC_DIR/mindvision_qobject/src/VideoThread.cpp \
+    $$SRC_DIR/serial_qobject/src/SerialWorker.cpp
 
 HEADERS += \
-    src/microscope_app/MainWindow.h \
-    src/cnc_control_panel_qobject/src/CNCControlPanel.h \
-    src/mosaic_panel_qobject/src/MosaicWidget.h \
-    src/mosaic_panel_qobject/src/MosaicPanel.h \
-    src/intensity_chart_qobject/src/IntensityChart.h \
-    src/color_picker_widget_qobject/src/ColorPickerWidget.h \
-    src/led_controller_qobject/src/LEDController.h \
-    src/scan_config_paneL_qobject/src/ScanConfigPanel.h \
-    src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
-    src/editor_qobject/src/PythonScintillaEditor.h \
-    src/mindvision_qobject/src/MindVisionCamera.h \
-    src/mindvision_qobject/src/VideoThread.h \
-    src/mindvision_qobject/src/mindvision_qobject_global.h \
-    src/serial_qobject/src/SerialWorker.h
+    $$APP_DIR/MainWindow.h \
+    $$SRC_DIR/cnc_control_panel_qobject/src/CNCControlPanel.h \
+    $$SRC_DIR/mosaic_panel_qobject/src/MosaicWidget.h \
+    $$SRC_DIR/mosaic_panel_qobject/src/MosaicPanel.h \
+    $$SRC_DIR/intensity_chart_qobject/src/IntensityChart.h \
+    $$SRC_DIR/color_picker_widget_qobject/src/ColorPickerWidget.h \
+    $$SRC_DIR/led_controller_qobject/src/LEDController.h \
+    $$SRC_DIR/scan_config_paneL_qobject/src/ScanConfigPanel.h \
+    $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.h \
+    $$SRC_DIR/editor_qobject/src/PythonScintillaEditor.h \
+    $$SRC_DIR/mindvision_qobject/src/MindVisionCamera.h \
+    $$SRC_DIR/mindvision_qobject/src/VideoThread.h \
+    $$SRC_DIR/mindvision_qobject/src/mindvision_qobject_global.h \
+    $$SRC_DIR/serial_qobject/src/SerialWorker.h
 
 FORMS += \
-    src/microscope_app/MainWindow.ui
+    $$APP_DIR/MainWindow.ui
+
+PY_MODULE_TARGET = $$DESTDIR/_microscope_app_cpp.so
+PY_MODULE_LINK = \
+    $${QMAKE_DEL_FILE} $$PY_MODULE_TARGET $$escape_expand(\n\t)\
+    $$QMAKE_CXX $$QMAKE_LFLAGS -shared -o $$PY_MODULE_TARGET $$OBJECTS_DIR/*.o $$LIBS /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
+
+QMAKE_POST_LINK += $$PY_MODULE_LINK

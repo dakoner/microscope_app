@@ -376,8 +376,11 @@ void CNCControlPanel::processQueue()
         }
 
         m_lastSentCommand = cmd;
-        m_serialWorker->send_command(cmd.toStdString());
-        m_waitingForOk = true;
+        m_waitingForOk = m_serialWorker->send_command(cmd.toStdString());
+        if (!m_waitingForOk) {
+            m_lastSentCommand.clear();
+            QTimer::singleShot(0, this, &CNCControlPanel::processQueue);
+        }
     }
 }
 

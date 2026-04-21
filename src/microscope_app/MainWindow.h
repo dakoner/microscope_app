@@ -25,6 +25,7 @@
 #include <QString>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <vector>
 
 namespace Ui { class MainWindow; }
@@ -38,6 +39,7 @@ class IntensityChart;
 class ScanConfigPanel;
 class ColorPickerWidget;
 class PythonScintillaEditor;
+class QsciScintilla;
 struct _object;
 typedef _object PyObject;
 
@@ -131,6 +133,11 @@ private slots:
 private:
     void connectSignals();
     void createPythonConsole();
+    bool executePythonCode(const QString &code,
+                           const std::function<void(const QString &)> &appendOutput);
+    void appendPythonScriptOutput(const QString &text);
+    void loadPythonScriptFromDisk();
+    void runPythonScriptEditorContents();
     void toggleCenterViewTab();
     void repositionPipOverlays();
     void startScanRowRecording(int rowNumber);
@@ -230,7 +237,12 @@ private:
     bool m_pythonInitialized = false;
     bool m_pythonHostedExternally = false;
     PyObject *m_pythonGlobals = nullptr;
+    QTabWidget *m_pythonIdeTabs = nullptr;
     PythonScintillaEditor *m_pythonEditor = nullptr;
+    QsciScintilla *m_pythonScriptEditor = nullptr;
+    QPlainTextEdit *m_pythonScriptOutput = nullptr;
+    QLabel *m_pythonScriptPathLabel = nullptr;
+    QString m_pythonScriptPath;
 
     // Ruler / Measurement
     bool m_rulerActive = false;

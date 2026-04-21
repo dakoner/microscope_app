@@ -71,28 +71,51 @@ void SerialWorker::disconnect_serial()
     }
 }
 
-void SerialWorker::send_command(const std::string& cmd)
+bool SerialWorker::send_command(const std::string& cmd)
 {
     if (m_serial.isOpen()) {
         std::string full_cmd = cmd + "\n";
-        m_serial.write(full_cmd.c_str(), full_cmd.size());
+        const qint64 written = m_serial.write(full_cmd.c_str(), full_cmd.size());
+        if (written != static_cast<qint64>(full_cmd.size())) {
+            const QString error = written < 0
+                ? m_serial.errorString()
+                : QString("short write (%1/%2 bytes)")
+                      .arg(written)
+                      .arg(full_cmd.size());
+            if (m_log_cb) {
+                m_log_cb("Error sending command '" + cmd + "': " + error.toStdString());
+            }
+            emit log_signal("Error sending command '" + QString::fromStdString(cmd) + "': " + error);
+            return false;
+        }
+
+        m_serial.flush();
         if (m_log_cb) {
             m_log_cb("> " + cmd);
         }
         emit log_signal("> " + QString::fromStdString(cmd));
+        return true;
     } else {
         if (m_log_cb) {
             m_log_cb("Error: Serial port not open.");
         }
         emit log_signal("Error: Serial port not open.");
+        return false;
     }
 }
 
-void SerialWorker::send_raw_command(const std::string& cmd)
+bool SerialWorker::send_raw_command(const std::string& cmd)
 {
     if (m_serial.isOpen()) {
-        m_serial.write(cmd.c_str(), cmd.size());
+        const qint64 written = m_serial.write(cmd.c_str(), cmd.size());
+        if (written != static_cast<qint64>(cmd.size())) {
+            return false;
+        }
+        m_serial.flush();
+        return true;
     }
+
+    return false;
 }
 
 void SerialWorker::poll_serial()
