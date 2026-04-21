@@ -57,7 +57,7 @@ MosaicPanel::MosaicPanel(double stageWidthMm, double stageHeightMm,
     // Tiles are allocated lazily in updateMosaic() when the camera first writes to them.
 
     // Default target overlay: 15 mm diameter circle centered at (48, 48) mm.
-    setStageCircles({std::make_tuple(48.0, 48.0, 7.5)});
+    setStageCircles({std::make_tuple(49.8, 46.8, 7.5)});
 
     connect(m_displayWidget, &MosaicWidget::clicked, this, &MosaicPanel::onMosaicClicked);
     connect(m_displayWidget, &MosaicWidget::selectionsChanged, this, &MosaicPanel::onSelectionsChanged);
@@ -75,7 +75,7 @@ void MosaicPanel::setStageCircles(const QVector<std::tuple<double, double, doubl
     QVector<QPair<QPointF, double>> px;
     for (const auto &[cx, cy, radius] : circlesMm) {
         double pxX = cx * m_calibrationPxPerMm * SCALE_FACTOR;
-        double pxY = (m_stageHeightMm - cy) * m_calibrationPxPerMm * SCALE_FACTOR;
+        double pxY = cy * m_calibrationPxPerMm * SCALE_FACTOR;
         double pxR = radius * m_calibrationPxPerMm * SCALE_FACTOR;
         px.append({QPointF(pxX, pxY), pxR});
     }
@@ -104,10 +104,10 @@ void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double 
     double fovHeightMm = m_cameraFrameHeightPx / m_calibrationPxPerMm;
 
     double tlXmm = cncXMm - fovWidthMm / 2.0;
-    double tlYmm = cncYMm + fovHeightMm / 2.0;
+    double tlYmm = cncYMm - fovHeightMm / 2.0;
 
     int drawX = int(tlXmm * m_calibrationPxPerMm * SCALE_FACTOR);
-    int drawY = int((m_stageHeightMm - tlYmm) * m_calibrationPxPerMm * SCALE_FACTOR);
+    int drawY = int(tlYmm * m_calibrationPxPerMm * SCALE_FACTOR);
 
     int scaledW = int(m_cameraFrameWidthPx * SCALE_FACTOR);
     int scaledH = int(m_cameraFrameHeightPx * SCALE_FACTOR);
@@ -159,7 +159,7 @@ void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double 
             int srcH = intersection.height();
 
             QImage chunk = scaledFrame.copy(srcX, srcY, srcW, srcH)
-                               .mirrored(true, true);
+                               .mirrored(true, false);
             blendIntoTile(tile, coverage, destX, destY, chunk);
             m_displayWidget->updateTile(r, c, tile);
         }
@@ -211,7 +211,7 @@ void MosaicPanel::blendIntoTile(QImage &tile, QImage &coverage,
 void MosaicPanel::onMosaicClicked(double imgX, double imgY)
 {
     double mmX = imgX / (m_calibrationPxPerMm * SCALE_FACTOR);
-    double mmY = m_stageHeightMm - imgY / (m_calibrationPxPerMm * SCALE_FACTOR);
+    double mmY = imgY / (m_calibrationPxPerMm * SCALE_FACTOR);
     emit requestMove(mmX, mmY);
 }
 
@@ -220,9 +220,9 @@ void MosaicPanel::onSelectionsChanged(const QVector<QRectF> &qrectfList)
     QVector<QRectF> mmRects;
     for (const auto &r : qrectfList) {
         double x1 = r.x() / (m_calibrationPxPerMm * SCALE_FACTOR);
-        double y1 = m_stageHeightMm - r.y() / (m_calibrationPxPerMm * SCALE_FACTOR);
+        double y1 = r.y() / (m_calibrationPxPerMm * SCALE_FACTOR);
         double x2 = r.right() / (m_calibrationPxPerMm * SCALE_FACTOR);
-        double y2 = m_stageHeightMm - r.bottom() / (m_calibrationPxPerMm * SCALE_FACTOR);
+        double y2 = r.bottom() / (m_calibrationPxPerMm * SCALE_FACTOR);
         mmRects.append(QRectF(QPointF(std::min(x1, x2), std::min(y1, y2)),
                               QPointF(std::max(x1, x2), std::max(y1, y2))));
     }
@@ -231,6 +231,7 @@ void MosaicPanel::onSelectionsChanged(const QVector<QRectF> &qrectfList)
     // Emit as scan request for the last selection
     if (!mmRects.isEmpty()) {
         const auto &last = mmRects.last();
+            qDebug("[DEBUG] MosaicPanel emitting requestScan: xMin=%f yMin=%f xMax=%f yMax=%f", last.left(), last.top(), last.right(), last.bottom());
         emit requestScan(last.left(), last.top(), last.right(), last.bottom());
     }
 }
@@ -239,7 +240,7 @@ void MosaicPanel::onMosaicMouseMoved(double imgX, double imgY)
 {
     if (m_calibrationPxPerMm > 0 && m_cursorLabel) {
         double mmX = imgX / (m_calibrationPxPerMm * SCALE_FACTOR);
-        double mmY = m_stageHeightMm - imgY / (m_calibrationPxPerMm * SCALE_FACTOR);
+        double mmY = imgY / (m_calibrationPxPerMm * SCALE_FACTOR);
         m_cursorLabel->setText(QString("Cursor: %1 mm, %2 mm")
                                    .arg(mmX, 0, 'f', 2)
                                    .arg(mmY, 0, 'f', 2));

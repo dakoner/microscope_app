@@ -63,7 +63,7 @@ void MosaicWidget::setCncPosition(double xMm, double yMm)
     if (m_totalWidth > 0 && m_stageWidthMm > 0) {
         double sf = double(m_totalWidth) / (m_stageWidthMm * m_calibrationPxPerMm);
         m_cncImagePos = QPointF(xMm * m_calibrationPxPerMm * sf,
-                                (m_stageHeightMm - yMm) * m_calibrationPxPerMm * sf);
+                                yMm * m_calibrationPxPerMm * sf);
     }
 }
 

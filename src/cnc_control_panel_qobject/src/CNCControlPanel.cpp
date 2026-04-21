@@ -165,6 +165,12 @@ void CNCControlPanel::setupUi()
     cmdLayout->addWidget(m_sendCommandButton);
     mainLayout->addLayout(cmdLayout);
 
+    // CNC log window
+    m_logWindow = new QPlainTextEdit;
+    m_logWindow->setReadOnly(true);
+    m_logWindow->setMaximumBlockCount(1000);
+    mainLayout->addWidget(m_logWindow);
+
     // Connections
     connect(m_refreshButton, &QPushButton::clicked, this, &CNCControlPanel::refreshSerialPorts);
     connect(m_connectButton, &QPushButton::toggled, this, &CNCControlPanel::onConnectToggled);
@@ -218,6 +224,9 @@ void CNCControlPanel::onLogMessage(const std::string &msg)
         if (kind == RxStatus) {
             parseStatus(normalized.mid(1, normalized.size() - 2));
         } else if (kind == RxOk || kind == RxError) {
+            if (m_logWindow)
+                m_logWindow->appendPlainText(qmsg);
+
             m_waitingForOk = false;
 
             if (m_lastSentCommand.contains("SCAN_START") && kind == RxOk) {
@@ -239,6 +248,9 @@ void CNCControlPanel::onLogMessage(const std::string &msg)
             processQueue();
             emit logSignal(qmsg);
         } else {
+            if (m_logWindow)
+                m_logWindow->appendPlainText(qmsg);
+
             emit logSignal(qmsg);
             if (qmsg.contains("Grbl 4.0 [FluidNC")) {
                 QTimer::singleShot(500, this, [this]() {
@@ -247,6 +259,9 @@ void CNCControlPanel::onLogMessage(const std::string &msg)
             }
         }
     } else {
+        if (m_logWindow)
+            m_logWindow->appendPlainText(qmsg);
+
         emit logSignal(qmsg);
     }
 }
@@ -307,19 +322,38 @@ void CNCControlPanel::onSerialStatusChanged(bool connected)
 
 void CNCControlPanel::sendCommand(const QString &cmd)
 {
+    if (m_logWindow)
+        m_logWindow->appendPlainText("[TX] " + cmd);
+
     enqueueCommand(cmd);
 }
 
 void CNCControlPanel::enqueueCommand(const QString &cmd)
 {
+    if (m_logWindow)
+        m_logWindow->appendPlainText("[QUEUE] " + cmd);
+
     m_commandQueue.append(cmd);
     processQueue();
 }
 
 void CNCControlPanel::processQueue()
 {
+    if (m_logWindow && !m_commandQueue.isEmpty())
+        m_logWindow->appendPlainText("[PROCESS] " + m_commandQueue.first());
+
     if (!m_waitingForOk && !m_commandQueue.isEmpty()) {
         QString cmd = m_commandQueue.takeFirst();
+
+        if (cmd == "__SCAN_ROW_START__") {
+            m_pendingScanEvent = PendingScanEvent::RowStart;
+            if (flushPendingScanEventIfIdle()) {
+                processQueue();
+                return;
+            }
+            processQueue();
+            return;
+        }
 
         if (cmd == "__SCAN_ROW_END__") {
             m_pendingScanEvent = PendingScanEvent::RowReady;
@@ -354,6 +388,11 @@ bool CNCControlPanel::flushPendingScanEventIfIdle()
 
     PendingScanEvent pending = m_pendingScanEvent;
     m_pendingScanEvent = PendingScanEvent::None;
+
+    if (pending == PendingScanEvent::RowStart) {
+        emit scanRowStartReady();
+        return true;
+    }
 
     if (pending == PendingScanEvent::RowReady) {
         emit scanRowReady();

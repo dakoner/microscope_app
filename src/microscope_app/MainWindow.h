@@ -22,6 +22,7 @@
 #include <QPointF>
 #include <QImage>
 #include <QElapsedTimer>
+#include <QString>
 #include <cstdint>
 #include <deque>
 #include <vector>
@@ -120,11 +121,12 @@ private slots:
     void startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
                    bool serpentine, int feedrate);
     void scanNextRow();
+    void onScanRowStartReady();
     void onRowFinished();
     void cancelScan();
     void onScanFinished();
 
-    void log(const QString &message);
+        void log(const QString &message) const;
 
 private:
     void connectSignals();
@@ -149,6 +151,10 @@ private:
     void loadSettings();
     void saveSettings();
     void loadStageSettings();
+    void writeScanMetadataFile(int imageWidth, int imageHeight) const;
+    void appendScanRowFrameMetadata(int imageWidth, int imageHeight,
+                                    double frameTimestampSec, double stageX, double stageY);
+    void writeScanRowMetadataFile(int rowNumber, bool completed);
 
     // Camera
     MindVisionCamera *m_camera = nullptr;
@@ -190,7 +196,20 @@ private:
     QString m_scanVideoOutputDir;
     qint64 m_scanSessionTimestamp = 0;
     bool m_scanRowRecordingActive = false;
+    bool m_scanRowCaptureEnabled = false;
     int m_scanRecordingRowNumber = 0;
+    QString m_scanRowVideoFilename;
+    double m_scanRowRecordFps = 0.0;
+
+    struct ScanRowFrameMetadata {
+        int frameIndex = 0;
+        int imageWidthPx = 0;
+        int imageHeightPx = 0;
+        double frameTimestampSec = 0.0;
+        double stageXmm = 0.0;
+        double stageYmm = 0.0;
+    };
+    std::vector<ScanRowFrameMetadata> m_scanRowFrameMetadata;
 
     struct PoseSample {
         double timestampSec = 0.0;

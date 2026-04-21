@@ -3,6 +3,7 @@
 
 #include <QGroupBox>
 #include <QComboBox>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QDoubleSpinBox>
 #include <QSpinBox>
@@ -61,6 +62,7 @@ private slots:
 private:
     enum class PendingScanEvent {
         None,
+        RowStart,
         RowReady,
         ScanFinished
     };
@@ -93,6 +95,7 @@ private:
     QLabel *m_wposXLabel = nullptr;
     QLabel *m_wposYLabel = nullptr;
     QLabel *m_wposZLabel = nullptr;
+    QPlainTextEdit *m_logWindow = nullptr;
     QLineEdit *m_commandInput = nullptr;
     QPushButton *m_sendCommandButton = nullptr;
 

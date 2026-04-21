@@ -121,6 +121,8 @@ void VideoThread::run()
     qDebug() << "VideoThread: Starting ffmpeg to write mkv to" << filename
              << "size" << width << "x" << height << "fps" << fps;
 
+    // Redirect ffmpeg output to a log file next to the video file
+    QString logPath = filename + ".ffmpeg.log";
     const QByteArray cmd =
         "ffmpeg -y"
         " -f rawvideo -vcodec rawvideo"
@@ -129,7 +131,8 @@ void VideoThread::run()
         " -r " + QByteArray::number(fps, 'f', 6) +
         " -i pipe:0"
         " -c:v libx264 -preset veryfast -crf 12"
-        " " + shellQuote(filename);
+        " " + shellQuote(filename) +
+        " >" + shellQuote(logPath) + " 2>&1";
 
     FILE *const pipe = ::popen(cmd.constData(), "w");
     if (!pipe) {
