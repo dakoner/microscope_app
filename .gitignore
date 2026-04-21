@@ -4,3 +4,5 @@ release/
 Camera/
 videos
 models
+.codex
+__pycache__
