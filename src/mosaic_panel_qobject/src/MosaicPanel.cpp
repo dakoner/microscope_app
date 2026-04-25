@@ -87,6 +87,20 @@ MosaicWidget *MosaicPanel::displayWidget() const
     return m_displayWidget;
 }
 
+void MosaicPanel::clearMosaic()
+{
+    m_tiles.clear();
+    m_tileCoverage.clear();
+    m_currentFrameRect = QRectF();
+    m_cameraFrameWidthPx = 0;
+    m_cameraFrameHeightPx = 0;
+
+    if (m_displayWidget) {
+        m_displayWidget->setCurrentFrameRect(QRectF());
+        m_displayWidget->resetMosaic(m_mosaicWidthPx, m_mosaicHeightPx, TILE_SIZE);
+    }
+}
+
 void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double cncYMm)
 {
     if (m_calibrationPxPerMm <= 0 || cameraFrame.isNull()) return;

@@ -21,6 +21,7 @@ public:
     MosaicPanel(double stageWidthMm, double stageHeightMm,
                 double rulerCalibrationPxPerMm, QWidget *parent = nullptr);
 
+    void clearMosaic();
     void updateMosaic(const QImage &cameraFrame, double cncXMm, double cncYMm);
     void setCncPosition(double xMm, double yMm);
     void setStageCircles(const QVector<std::tuple<double, double, double>> &circlesMm);

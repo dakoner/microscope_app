@@ -998,6 +998,15 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    if (event->key() == Qt::Key_R) {
+        if (m_mosaicPanel) {
+            m_mosaicPanel->clearMosaic();
+            log("Mosaic cleared.");
+        }
+        event->accept();
+        return;
+    }
+
     if (m_cncControlPanel) {
         switch (event->key()) {
         case Qt::Key_Left:  m_cncControlPanel->moveLeft();    return;
