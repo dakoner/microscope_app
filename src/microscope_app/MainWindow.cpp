@@ -1270,13 +1270,21 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
         appendScanRowFrameMetadata(image.width(), image.height(), frameTimestampSec, poseX, poseY);
     }
 
-    // Mosaic update (temporarily unthrottled)
-    if (m_mosaicPanel && m_cncState != "Home") {
-        m_lastMosaicUpdateTime = nowSec();
-        m_mosaicPanel->updateMosaic(image, poseX, poseY);
-        ++m_framesWrittenToMosaicCount;
-        updateFrameStatsLabel();
+    const bool shouldUpdateMosaicOverlay =
+        m_mosaicPanel &&
+        m_cncState != "Home";
+    // During scan acquisition, only stitch frames that are inside the active row recording window.
+    const bool shouldStitchMosaicFrame =
+        shouldUpdateMosaicOverlay &&
+        (!m_isScanning || (m_scanRowRecordingActive && m_scanRowCaptureEnabled));
 
+    if (shouldUpdateMosaicOverlay) {
+        m_mosaicPanel->updateMosaic(image, poseX, poseY, shouldStitchMosaicFrame);
+        if (shouldStitchMosaicFrame) {
+            m_lastMosaicUpdateTime = nowSec();
+            ++m_framesWrittenToMosaicCount;
+            updateFrameStatsLabel();
+        }
         if (m_mosaicPipLabel) {
             QPixmap mosaicPixmap = m_mosaicPanel->createPreview(m_mosaicPipLabel->size());
             if (!mosaicPixmap.isNull()) {

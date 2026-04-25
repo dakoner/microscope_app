@@ -22,7 +22,8 @@ public:
                 double rulerCalibrationPxPerMm, QWidget *parent = nullptr);
 
     void clearMosaic();
-    void updateMosaic(const QImage &cameraFrame, double cncXMm, double cncYMm);
+    void updateMosaic(const QImage &cameraFrame, double cncXMm, double cncYMm,
+                      bool stitchFrame = true);
     void setCncPosition(double xMm, double yMm);
     void setStageCircles(const QVector<std::tuple<double, double, double>> &circlesMm);
     QPixmap createPreview(const QSize &size) const;

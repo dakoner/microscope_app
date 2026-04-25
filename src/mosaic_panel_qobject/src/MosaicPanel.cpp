@@ -101,7 +101,8 @@ void MosaicPanel::clearMosaic()
     }
 }
 
-void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double cncYMm)
+void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double cncYMm,
+                               bool stitchFrame)
 {
     if (m_calibrationPxPerMm <= 0 || cameraFrame.isNull()) return;
 
@@ -131,6 +132,14 @@ void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double 
     m_displayWidget->beginUpdate();
     m_displayWidget->setCurrentFrameRect(m_currentFrameRect);
     m_displayWidget->setCncPosition(cncXMm, cncYMm);
+
+    if (!stitchFrame) {
+        m_displayWidget->endUpdate();
+        m_positionLabel->setText(QString("CNC: %1 mm, %2 mm")
+                                     .arg(cncXMm, 0, 'f', 1)
+                                     .arg(cncYMm, 0, 'f', 1));
+        return;
+    }
 
     int startCol = std::max(0, frameRect.left() / TILE_SIZE);
     int endCol = std::min(m_cols - 1, frameRect.right() / TILE_SIZE);
