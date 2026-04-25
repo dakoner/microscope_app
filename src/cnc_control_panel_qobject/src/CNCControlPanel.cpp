@@ -303,7 +303,7 @@ void CNCControlPanel::onSerialStatusChanged(bool connected)
     if (!connected) {
         m_commandQueue.clear();
         m_waitingForOk = false;
-        m_pendingScanEvent = PendingScanEvent::None;
+        m_pendingScanEvents.clear();
         m_lastState.clear();
         m_statusPollTimer.stop();
     } else {
@@ -346,32 +346,23 @@ void CNCControlPanel::processQueue()
         QString cmd = m_commandQueue.takeFirst();
 
         if (cmd == "__SCAN_ROW_START__") {
-            m_pendingScanEvent = PendingScanEvent::RowStart;
-            if (flushPendingScanEventIfIdle()) {
+            m_pendingScanEvents.append(PendingScanEvent::RowStart);
+            if (flushPendingScanEventIfIdle())
                 processQueue();
-                return;
-            }
-            processQueue();
             return;
         }
 
         if (cmd == "__SCAN_ROW_END__") {
-            m_pendingScanEvent = PendingScanEvent::RowReady;
-            if (flushPendingScanEventIfIdle()) {
+            m_pendingScanEvents.append(PendingScanEvent::RowReady);
+            if (flushPendingScanEventIfIdle())
                 processQueue();
-                return;
-            }
-            processQueue();
             return;
         }
 
         if (cmd == "__SCAN_DONE__") {
-            m_pendingScanEvent = PendingScanEvent::ScanFinished;
-            if (flushPendingScanEventIfIdle()) {
+            m_pendingScanEvents.append(PendingScanEvent::ScanFinished);
+            if (flushPendingScanEventIfIdle())
                 processQueue();
-                return;
-            }
-            processQueue();
             return;
         }
 
@@ -386,11 +377,10 @@ void CNCControlPanel::processQueue()
 
 bool CNCControlPanel::flushPendingScanEventIfIdle()
 {
-    if (m_lastState != "Idle" || m_pendingScanEvent == PendingScanEvent::None)
+    if (m_lastState != "Idle" || m_pendingScanEvents.isEmpty())
         return false;
 
-    PendingScanEvent pending = m_pendingScanEvent;
-    m_pendingScanEvent = PendingScanEvent::None;
+    PendingScanEvent pending = m_pendingScanEvents.takeFirst();
 
     if (pending == PendingScanEvent::RowStart) {
         emit scanRowStartReady();

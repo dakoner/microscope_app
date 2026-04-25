@@ -192,6 +192,11 @@ private:
     bool m_isScanning = false;
     int m_scanCurrentRow = 0;
     int m_scanTotalRows = 0;
+    // Column-based scanning variables
+    int m_scanCurrentCol = 0;
+    int m_scanTotalCols = 0;
+    double m_scanStepX = 0;
+    double m_scanCurrentX = 0;
     double m_scanXMin = 0, m_scanYMin = 0, m_scanXMax = 0, m_scanYMax = 0;
     bool m_scanHomeX = false, m_scanHomeY = false;
     bool m_scanSerpentine = false;

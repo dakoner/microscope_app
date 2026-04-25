@@ -11,6 +11,7 @@
 #include <QLineEdit>
 #include <QTimer>
 #include <QStringList>
+#include <QList>
 
 #include "SerialWorker.h"
 
@@ -102,7 +103,7 @@ private:
     QStringList m_commandQueue;
     bool m_waitingForOk = false;
     QString m_lastSentCommand;
-    PendingScanEvent m_pendingScanEvent = PendingScanEvent::None;
+    QList<PendingScanEvent> m_pendingScanEvents;
     QString m_lastState;
     double m_stepSize = 0.1;
     double m_zStepSize = 0.01;

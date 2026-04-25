@@ -1844,14 +1844,17 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
     m_scanSerpentine = serpentine;
     m_scanFeedrate = feedrate;
 
+    // Swap axes: scan along Y for each X-column
     m_scanFovXMm = imgH / m_rulerCalibration;
     m_scanFovYMm = imgW / m_rulerCalibration;
-    m_scanStepY = m_scanFovYMm * 0.75;
+    m_scanStepX = m_scanFovXMm * 0.75;
 
-    double scanHeight = m_scanYMax - m_scanYMin;
-    m_scanTotalRows = m_scanStepY > 0 ? static_cast<int>(scanHeight / m_scanStepY) : 0;
+    double scanWidth = m_scanXMax - m_scanXMin;
+    m_scanTotalCols = m_scanStepX > 0 ? static_cast<int>(scanWidth / m_scanStepX) : 0;
+    m_scanTotalRows = m_scanTotalCols;
     m_scanCurrentRow = 0;
-    m_scanCurrentY = m_scanYMax - (m_scanFovYMm / 2.0);
+    m_scanCurrentCol = 0;
+    m_scanCurrentX = m_scanXMin + (m_scanFovXMm / 2.0);
     m_scanIsFirstStrip = true;
     m_isScanning = true;
     m_scanSessionTimestamp = QDateTime::currentSecsSinceEpoch();
@@ -1865,34 +1868,35 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
     m_cncControlPanel->sendCommand("G90");
     m_cncControlPanel->sendCommand(QString("F%1").arg(m_scanFeedrate));
 
-    log(QString("Starting Mosaic Scan: %1 rows.").arg(m_scanTotalRows));
+    log(QString("Starting Mosaic Scan: %1 columns.").arg(m_scanTotalCols));
     if (m_scanPanel) {
-        m_scanPanel->updateStatus(QString("Starting scan of %1 rows.").arg(m_scanTotalRows));
-        m_scanPanel->updateProgress(0, m_scanTotalRows);
+        m_scanPanel->updateStatus(QString("Starting scan of %1 columns.").arg(m_scanTotalCols));
+        m_scanPanel->updateProgress(0, m_scanTotalCols);
     }
 
-    scanNextRow();
+    scanNextRow(); // Will be renamed to scanNextColumn
 }
 
 void MainWindow::scanNextRow()
 {
     if (!m_isScanning || !m_cncControlPanel) return;
 
-    if (m_scanCurrentY > m_scanYMin) {
-        startScanRowRecording(m_scanCurrentRow + 1);
+    // Now scan along Y for each X-column
+    if (m_scanCurrentCol < m_scanTotalCols) {
+        startScanRowRecording(m_scanCurrentCol + 1);
 
-        double yTarget = std::max(m_scanCurrentY, m_scanYMin + m_scanFovYMm / 2.0);
-        double startX = m_scanXMin + (m_scanFovXMm / 2.0);
-        double endX = m_scanXMax - (m_scanFovXMm / 2.0);
-        bool reverseRow = m_scanSerpentine && (m_scanCurrentRow % 2 == 1);
-        double rowStartX = reverseRow ? endX : startX;
-        double rowEndX = reverseRow ? startX : endX;
+        double xTarget = m_scanCurrentX;
+        double startY = m_scanYMax - (m_scanFovYMm / 2.0);
+        double endY = m_scanYMin + (m_scanFovYMm / 2.0);
+        bool reverseCol = m_scanSerpentine && (m_scanCurrentCol % 2 == 1);
+        double colStartY = reverseCol ? endY : startY;
+        double colEndY = reverseCol ? startY : endY;
 
         if (m_scanIsFirstStrip || !m_scanSerpentine || m_scanHomeX || m_scanHomeY) {
-            m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(rowStartX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
+            m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(xTarget, 0, 'f', 3).arg(colStartY, 0, 'f', 3));
             m_scanIsFirstStrip = false;
         } else {
-            m_cncControlPanel->sendCommand(QString("G1 Y%1").arg(yTarget, 0, 'f', 3));
+            m_cncControlPanel->sendCommand(QString("G1 X%1").arg(xTarget, 0, 'f', 3));
         }
 
         if (m_scanHomeY)
@@ -1901,15 +1905,16 @@ void MainWindow::scanNextRow()
             m_cncControlPanel->sendCommand("$HX");
 
         if (m_scanHomeX || m_scanHomeY) {
-            m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(rowStartX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
+            m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(xTarget, 0, 'f', 3).arg(colStartY, 0, 'f', 3));
         }
         m_cncControlPanel->sendCommand("G4 P0");
         m_cncControlPanel->sendCommand("__SCAN_ROW_START__");
-        m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(rowEndX, 0, 'f', 3).arg(yTarget, 0, 'f', 3));
+        m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(xTarget, 0, 'f', 3).arg(colEndY, 0, 'f', 3));
         m_cncControlPanel->sendCommand("G4 P0");
         m_cncControlPanel->sendCommand("__SCAN_ROW_END__");
 
-        m_scanCurrentY -= m_scanStepY;
+        m_scanCurrentCol++;
+        m_scanCurrentX += m_scanStepX;
     } else {
         m_cncControlPanel->sendCommand("__SCAN_DONE__");
     }
