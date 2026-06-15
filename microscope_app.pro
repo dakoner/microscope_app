@@ -1,8 +1,10 @@
 QT += core gui widgets serialport
 
 CONFIG += c++20
+CONFIG += link_pkgconfig
 CONFIG -= debug_and_release
 QMAKE_LFLAGS += -Wl,--disable-new-dtags
+PKGCONFIG += libtiff-4
 
 TARGET = microscope_app
 TEMPLATE = app
@@ -155,6 +157,6 @@ FORMS += \
 PY_MODULE_TARGET = $$DESTDIR/_microscope_app_cpp.so
 PY_MODULE_LINK = \
     $${QMAKE_DEL_FILE} $$PY_MODULE_TARGET $$escape_expand(\n\t)\
-    $$QMAKE_CXX $$QMAKE_LFLAGS -shared -o $$PY_MODULE_TARGET $$OBJECTS_DIR/*.o $$LIBS /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
+    $$QMAKE_CXX $$QMAKE_LFLAGS -shared -o $$PY_MODULE_TARGET $$OBJECTS_DIR/*.o $$LIBS -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
 
 QMAKE_POST_LINK += $$PY_MODULE_LINK

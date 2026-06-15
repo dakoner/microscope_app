@@ -34,6 +34,7 @@
 #include <QStandardPaths>
 #include <Qsci/qsciscintilla.h>
 #include <Qsci/qscilexerpython.h>
+#include <tiffio.h>
 
 #include <cmath>
 #include <ctime>
@@ -104,6 +105,81 @@ static void appendPlainTextBlock(QPlainTextEdit *widget, const QString &text)
         widget->insertPlainText("\n");
     }
     widget->ensureCursorVisible();
+}
+
+static bool saveQImageAsBigTiff(const QImage &image, const QString &outputPath, QString *errorMessage)
+{
+    if (image.isNull()) {
+        if (errorMessage)
+            *errorMessage = "image is empty";
+        return false;
+    }
+
+    const QImage rgbImage = image.convertToFormat(QImage::Format_RGB888);
+    const QByteArray encodedPath = QFile::encodeName(outputPath);
+    TIFF *tiff = TIFFOpen(encodedPath.constData(), "w8");
+    if (!tiff) {
+        if (errorMessage)
+            *errorMessage = "could not open BigTIFF for writing";
+        return false;
+    }
+
+    const uint32_t width = static_cast<uint32_t>(rgbImage.width());
+    const uint32_t height = static_cast<uint32_t>(rgbImage.height());
+
+    bool ok = true;
+    QString failureReason;
+
+    ok = ok && TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, width) == 1;
+    ok = ok && TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, height) == 1;
+    ok = ok && TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, 3) == 1;
+    ok = ok && TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, 8) == 1;
+    ok = ok && TIFFSetField(tiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT) == 1;
+    ok = ok && TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG) == 1;
+    ok = ok && TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB) == 1;
+    ok = ok && TIFFSetField(tiff, TIFFTAG_COMPRESSION, COMPRESSION_LZW) == 1;
+    ok = ok && TIFFSetField(tiff, TIFFTAG_PREDICTOR, PREDICTOR_HORIZONTAL) == 1;
+    ok = ok && TIFFSetField(tiff, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tiff, 0)) == 1;
+
+    if (!ok) {
+        failureReason = "could not configure TIFF fields";
+    } else {
+        for (uint32_t row = 0; row < height; ++row) {
+            if (TIFFWriteScanline(tiff,
+                                  const_cast<uchar *>(rgbImage.constScanLine(static_cast<int>(row))),
+                                  row,
+                                  0) != 1) {
+                ok = false;
+                failureReason = QString("failed while writing row %1").arg(row);
+                break;
+            }
+        }
+    }
+
+    if (TIFFClose(tiff), !ok && errorMessage)
+        *errorMessage = failureReason;
+
+    return ok;
+}
+
+static QImage orientScanCompositeFrame(const QImage &image)
+{
+    const QImage source = image.convertToFormat(QImage::Format_RGB32);
+    if (source.isNull())
+        return {};
+
+    // Scan mode swaps camera axes relative to stage motion. Rotate frames into
+    // stage coordinates so each saved column has the same top/bottom direction
+    // as the scan area.
+    QImage oriented(source.height(), source.width(), QImage::Format_RGB32);
+    for (int y = 0; y < source.height(); ++y) {
+        const QRgb *srcLine = reinterpret_cast<const QRgb *>(source.constScanLine(y));
+        for (int x = 0; x < source.width(); ++x) {
+            oriented.setPixel(y, source.width() - 1 - x, srcLine[x]);
+        }
+    }
+
+    return oriented;
 }
 
 static void setupPythonScriptEditor(QsciScintilla *editor)
@@ -1284,6 +1360,7 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
             m_lastMosaicUpdateTime = nowSec();
             ++m_framesWrittenToMosaicCount;
             updateFrameStatsLabel();
+            updateScanCompositeBuffer(image, poseX, poseY);
         }
         if (m_mosaicPipLabel) {
             QPixmap mosaicPixmap = m_mosaicPanel->createPreview(m_mosaicPipLabel->size());
@@ -1874,6 +1951,8 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
     m_scanCurrentX = m_scanXMin + (m_scanFovXMm / 2.0);
     m_scanIsFirstStrip = true;
     m_isScanning = true;
+    resetScanCompositeBuffer();
+    initializeScanCompositeBuffer(imgW, imgH);
     m_scanSessionTimestamp = QDateTime::currentSecsSinceEpoch();
     QDir videosDir(resolveOutputBaseDir());
     videosDir.mkpath(".");
@@ -1960,6 +2039,7 @@ void MainWindow::cancelScan()
     if (!m_isScanning) return;
     m_isScanning = false;
     stopScanRowRecording();
+    resetScanCompositeBuffer();
     if (m_cncControlPanel) {
         m_cncControlPanel->sendCommand("!");
         m_cncControlPanel->stop();
@@ -1974,6 +2054,8 @@ void MainWindow::onScanFinished()
     if (!m_isScanning) return;
     m_isScanning = false;
     stopScanRowRecording();
+    saveScanCompositeBuffer();
+    resetScanCompositeBuffer();
     log("Mosaic scan finished.");
     if (m_scanPanel)
         m_scanPanel->scanFinished(true);
@@ -2149,6 +2231,102 @@ void MainWindow::writeScanRowMetadataFile(int rowNumber, bool completed)
     }
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
     log(QString("[DEBUG] row metadata written OK: %1").arg(rowMetaPath));
+}
+
+void MainWindow::initializeScanCompositeBuffer(int imageWidth, int imageHeight)
+{
+    resetScanCompositeBuffer();
+
+    if (m_rulerCalibration <= 0.0 || imageWidth <= 0 || imageHeight <= 0)
+        return;
+
+    const int widthPx = std::max(1, static_cast<int>(std::ceil((m_scanXMax - m_scanXMin) * m_rulerCalibration)));
+    const int heightPx = std::max(1, static_cast<int>(std::ceil((m_scanYMax - m_scanYMin) * m_rulerCalibration)));
+
+    m_scanCompositeImage = QImage(widthPx, heightPx, QImage::Format_RGB32);
+    m_scanCompositeImage.fill(Qt::white);
+    m_scanCompositeCoverage = QImage(widthPx, heightPx, QImage::Format_Grayscale8);
+    m_scanCompositeCoverage.fill(0);
+    m_scanCompositeWidthPx = widthPx;
+    m_scanCompositeHeightPx = heightPx;
+    m_scanCompositeSourceFrameWidthPx = imageWidth;
+    m_scanCompositeSourceFrameHeightPx = imageHeight;
+}
+
+void MainWindow::resetScanCompositeBuffer()
+{
+    m_scanCompositeImage = QImage();
+    m_scanCompositeCoverage = QImage();
+    m_scanCompositeWidthPx = 0;
+    m_scanCompositeHeightPx = 0;
+    m_scanCompositeSourceFrameWidthPx = 0;
+    m_scanCompositeSourceFrameHeightPx = 0;
+}
+
+void MainWindow::updateScanCompositeBuffer(const QImage &image, double stageXmm, double stageYmm)
+{
+    if (image.isNull() || m_rulerCalibration <= 0.0)
+        return;
+
+    if (m_scanCompositeImage.isNull() ||
+        m_scanCompositeSourceFrameWidthPx != image.width() ||
+        m_scanCompositeSourceFrameHeightPx != image.height()) {
+        initializeScanCompositeBuffer(image.width(), image.height());
+    }
+
+    if (m_scanCompositeImage.isNull() || m_scanCompositeCoverage.isNull())
+        return;
+
+    const QImage source = orientScanCompositeFrame(image);
+    if (source.isNull())
+        return;
+
+    const double fovWidthMm = static_cast<double>(source.width()) / m_rulerCalibration;
+    const double fovHeightMm = static_cast<double>(source.height()) / m_rulerCalibration;
+    const double tlXmm = stageXmm - (fovWidthMm / 2.0);
+    const double tlYmm = stageYmm - (fovHeightMm / 2.0);
+
+    const int drawX = static_cast<int>(std::lround((tlXmm - m_scanXMin) * m_rulerCalibration));
+    const int drawY = static_cast<int>(std::lround((tlYmm - m_scanYMin) * m_rulerCalibration));
+    const QRect frameRect(drawX, drawY, source.width(), source.height());
+    const QRect bufferRect(0, 0, m_scanCompositeWidthPx, m_scanCompositeHeightPx);
+    const QRect intersection = frameRect.intersected(bufferRect);
+    if (intersection.isEmpty())
+        return;
+
+    for (int y = 0; y < intersection.height(); ++y) {
+        const int destY = intersection.y() + y;
+        const int srcY = intersection.y() - frameRect.y() + y;
+        const QRgb *srcLine = reinterpret_cast<const QRgb *>(source.constScanLine(srcY));
+        QRgb *destLine = reinterpret_cast<QRgb *>(m_scanCompositeImage.scanLine(destY));
+        uchar *coverageLine = m_scanCompositeCoverage.scanLine(destY);
+
+        for (int x = 0; x < intersection.width(); ++x) {
+            const int destX = intersection.x() + x;
+            const int srcX = intersection.x() - frameRect.x() + x;
+            if (coverageLine[destX]) {
+                destLine[destX] = ((destLine[destX] >> 1) & 0x7F7F7F7F)
+                                + ((srcLine[srcX] >> 1) & 0x7F7F7F7F);
+            } else {
+                destLine[destX] = srcLine[srcX];
+            }
+            coverageLine[destX] = 255;
+        }
+    }
+}
+
+void MainWindow::saveScanCompositeBuffer()
+{
+    if (m_scanVideoOutputDir.isEmpty() || m_scanCompositeImage.isNull())
+        return;
+
+    const QString outputPath = QDir(m_scanVideoOutputDir).filePath("scan_composite.tif");
+    QString errorMessage;
+    if (saveQImageAsBigTiff(m_scanCompositeImage, outputPath, &errorMessage)) {
+        log(QString("Scan composite saved: %1").arg(QFileInfo(outputPath).fileName()));
+    } else {
+        log(QString("Scan composite error: could not write %1 (%2)").arg(outputPath, errorMessage));
+    }
 }
 
 // ---------- Logging ----------

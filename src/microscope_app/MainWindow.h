@@ -162,6 +162,10 @@ private:
     void appendScanRowFrameMetadata(int imageWidth, int imageHeight,
                                     double frameTimestampSec, double stageX, double stageY);
     void writeScanRowMetadataFile(int rowNumber, bool completed);
+    void initializeScanCompositeBuffer(int imageWidth, int imageHeight);
+    void resetScanCompositeBuffer();
+    void updateScanCompositeBuffer(const QImage &image, double stageXmm, double stageYmm);
+    void saveScanCompositeBuffer();
 
     // Camera
     MindVisionCamera *m_camera = nullptr;
@@ -212,6 +216,12 @@ private:
     int m_scanRecordingRowNumber = 0;
     QString m_scanRowVideoFilename;
     double m_scanRowRecordFps = 0.0;
+    QImage m_scanCompositeImage;
+    QImage m_scanCompositeCoverage;
+    int m_scanCompositeWidthPx = 0;
+    int m_scanCompositeHeightPx = 0;
+    int m_scanCompositeSourceFrameWidthPx = 0;
+    int m_scanCompositeSourceFrameHeightPx = 0;
 
     struct ScanRowFrameMetadata {
         int frameIndex = 0;
