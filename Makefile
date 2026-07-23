@@ -16,8 +16,8 @@ CC            = gcc
 CXX           = g++
 DEFINES       = -DMINDVISION_QOBJECT_LIBRARY -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_SERIALPORT_LIB -DQT_CORE_LIB
 CFLAGS        = -pipe -O2 -Wall -Wextra -fPIC -D_REENTRANT $(DEFINES)
-CXXFLAGS      = -pipe -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -O2 -std=gnu++2a -Wall -Wextra -fPIC -D_REENTRANT $(DEFINES)
-INCPATH       = -I. -I/usr/include/x86_64-linux-gnu/qt6/Qsci -Isrc/microscope_app -Isrc/mindvision_qobject/Include -Isrc/mindvision_qobject/src -Isrc/cnc_control_panel_qobject/src -Isrc/serial_qobject/src -Isrc/led_controller_qobject/src -Isrc/color_picker_widget_qobject/src -Isrc/intensity_chart_qobject/src -Isrc/mosaic_panel_qobject/src -Isrc/editor_qobject/src -Isrc/scan_config_paneL_qobject/src -Isrc/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -Irelease/.moc -Irelease/.ui -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++
+CXXFLAGS      = -pipe -I/usr/include/python3.12 -I/usr/include/python3.12 -O2 -std=gnu++2a -Wall -Wextra -fPIC -D_REENTRANT $(DEFINES)
+INCPATH       = -I. -I/usr/include/x86_64-linux-gnu/qt6/Qsci -Isrc/microscope_app -Isrc/mindvision_qobject/Include -Isrc/mindvision_qobject/src -Isrc/cnc_control_panel_qobject/src -Isrc/serial_qobject/src -Isrc/led_controller_qobject/src -Isrc/color_picker_widget_qobject/src -Isrc/intensity_chart_qobject/src -Isrc/mosaic_panel_qobject/src -Isrc/editor_qobject/src -Isrc/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -Irelease/.moc -Irelease/.ui -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++
 QMAKE         = /usr/bin/qmake6
 DEL_FILE      = rm -f
 CHK_DIR_EXISTS= test -d
@@ -39,8 +39,8 @@ COMPRESS      = gzip -9f
 DISTNAME      = microscope_app1.0.0
 DISTDIR = /home/davidek/src/microtools/microscope_app/release/.obj/microscope_app1.0.0
 LINK          = g++
-LFLAGS        = -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/.venv/lib/python3.11/site-packages/PySide6/Qt/lib -Wl,-rpath,/usr/lib/x86_64-linux-gnu -Wl,-rpath,/usr/local/cuda/targets/x86_64-linux/lib -Wl,-O1 -Wl,-rpath-link,/usr/lib/x86_64-linux-gnu
-LIBS          = $(SUBLIBS) -L/usr/lib/x86_64-linux-gnu -lqscintilla2_qt6 -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK -L/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib -lpython3.11 -ldl -lutil -lm -lnvinfer -lnvinfer_plugin -L/usr/local/cuda/targets/x86_64-linux/lib -lcudart -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL   
+LFLAGS        = -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/.venv/lib/python3.11/site-packages/PySide6/Qt/lib -Wl,-O1 -Wl,-rpath-link,/usr/lib/x86_64-linux-gnu
+LIBS          = $(SUBLIBS) -L/usr/lib/x86_64-linux-gnu -lqscintilla2_qt6 -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK -L/usr/lib/python3.12/config-3.12-x86_64-linux-gnu -lpython3.12 -ldl -lm -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL   
 AR            = ar cqs
 RANLIB        = 
 SED           = sed
@@ -62,7 +62,6 @@ SOURCES       = src/microscope_app/main.cpp \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
 		src/led_controller_qobject/src/LEDController.cpp \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
 		src/editor_qobject/src/PythonScintillaEditor.cpp \
 		src/mindvision_qobject/src/MindVisionCamera.cpp \
 		src/mindvision_qobject/src/VideoThread.cpp \
@@ -74,7 +73,6 @@ SOURCES       = src/microscope_app/main.cpp \
 		release/.moc/moc_ColorPickerWidget.cpp \
 		release/.moc/moc_LEDController.cpp \
 		release/.moc/moc_ScanConfigPanel.cpp \
-		release/.moc/moc_YOLOInferenceWorker.cpp \
 		release/.moc/moc_PythonScintillaEditor.cpp \
 		release/.moc/moc_MindVisionCamera.cpp \
 		release/.moc/moc_VideoThread.cpp \
@@ -89,7 +87,6 @@ OBJECTS       = release/.obj/main.o \
 		release/.obj/ColorPickerWidget.o \
 		release/.obj/LEDController.o \
 		release/.obj/ScanConfigPanel.o \
-		release/.obj/YOLOInferenceWorker.o \
 		release/.obj/PythonScintillaEditor.o \
 		release/.obj/MindVisionCamera.o \
 		release/.obj/VideoThread.o \
@@ -102,7 +99,6 @@ OBJECTS       = release/.obj/main.o \
 		release/.obj/moc_ColorPickerWidget.o \
 		release/.obj/moc_LEDController.o \
 		release/.obj/moc_ScanConfigPanel.o \
-		release/.obj/moc_YOLOInferenceWorker.o \
 		release/.obj/moc_PythonScintillaEditor.o \
 		release/.obj/moc_MindVisionCamera.o \
 		release/.obj/moc_VideoThread.o \
@@ -116,21 +112,6 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/common/g++-base.conf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/common/g++-unix.conf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/qconfig.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_KUserFeedbackCoreQt6.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_KUserFeedbackWidgetsQt6.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3danimation.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dcore.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dextras.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dinput.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dlogic.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquick.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickanimation.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickextras.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickinput.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickrender.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickscene2d.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3drender.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_bluetooth.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_charts.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_chartsqml.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_concurrent.pri \
@@ -143,8 +124,6 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_dbus.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_dbus_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_designer.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_designer_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_designercomponents_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_devicediscovery_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_eglfs_kms_gbm_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_eglfs_kms_support_private.pri \
@@ -153,160 +132,63 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_gui.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_gui_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_help.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_help_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_httpserver.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_hunspellinputmethod.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_input_support_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_jsonrpc_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_kms_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsanimation.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsanimation_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsfolderlistmodel.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsfolderlistmodel_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsqmlmodels.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsqmlmodels_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssettings.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssettings_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssharedimage.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssharedimage_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labswavefrontmesh.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labswavefrontmesh_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_languageserver_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_linguist.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_linguist_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_multimedia.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_multimediawidgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_network.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_network_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_networkauth.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_nfc.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_opengl.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_opengl_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_openglwidgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_openglwidgets_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_packetprotocol_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_pdf.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_pdfquick.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_pdfwidgets.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_positioning.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_positioningquick.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_printsupport.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_printsupport_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qml.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qml_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlcompiler_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlcore.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlcore_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmldebug_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmldom_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlintegration.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlintegration_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmllocalstorage.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmllocalstorage_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlmodels.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlmodels_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmltest.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmltest_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlworkerscript.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlworkerscript_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlxmllistmodel.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlxmllistmodel_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3d.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3d_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetimport.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetimport_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetutils.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetutils_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3deffects.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3deffects_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dglslparser_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dhelpers.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dhelpers_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3diblbaker.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3diblbaker_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticleeffects.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticleeffects_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticles.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticles_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dphysics.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dphysicshelpers.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3druntimerender.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3druntimerender_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dutils.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dutils_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2impl.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2impl_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrolstestutilsprivate_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2quickimpl.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2quickimpl_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2utils.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2utils_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicklayouts.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicklayouts_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickparticles_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickshapes_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktemplates2.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktemplates2_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktestutilsprivate_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktimeline.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktimeline_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickwidgets.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickwidgets_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_remoteobjects.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_remoteobjectsqml.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_repparser.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_scxml.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_scxmlqml.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sensors.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sensorsquick.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_serialbus.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_serialport.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_shadertools.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_shadertools_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_spatialaudio.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sql.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sql_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_statemachine.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_statemachineqml.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_svg.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_svgwidgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_testlib.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_testlib_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_texttospeech.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_tools_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_uiplugin.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_uitools.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_uitools_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_virtualkeyboard.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_wayland_egl_client_hw_integration_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_wayland_egl_compositor_hw_integration_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandclient.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandclient_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandcompositor.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandcompositor_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandglobal_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webchannel.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginecore.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginecore_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequick.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequick_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequickdelegatesqml.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequickdelegatesqml_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginewidgets.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginewidgets_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_websockets.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_websockets_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webview.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webviewquick.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_widgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_widgets_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_wl_shell_integration_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_xcb_qpa_lib_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_xml.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_xml_private.pri \
@@ -343,7 +225,6 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.h \
 		src/led_controller_qobject/src/LEDController.h \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.h \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
 		src/editor_qobject/src/PythonScintillaEditor.h \
 		src/mindvision_qobject/src/MindVisionCamera.h \
 		src/mindvision_qobject/src/VideoThread.h \
@@ -358,7 +239,6 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
 		src/led_controller_qobject/src/LEDController.cpp \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
 		src/editor_qobject/src/PythonScintillaEditor.cpp \
 		src/mindvision_qobject/src/MindVisionCamera.cpp \
 		src/mindvision_qobject/src/VideoThread.cpp \
@@ -375,7 +255,7 @@ release/microscope_app: release/.ui/ui_MainWindow.h $(OBJECTS)
 	@test -d release/ || mkdir -p release/
 	$(LINK) $(LFLAGS) -o $(TARGET)  $(OBJECTS) $(OBJCOMP) $(LIBS)
 	rm -f ./release/_microscope_app_cpp.so 
-	 g++ -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/.venv/lib/python3.11/site-packages/PySide6/Qt/lib -Wl,-rpath,/usr/lib/x86_64-linux-gnu -Wl,-rpath,/usr/local/cuda/targets/x86_64-linux/lib -shared -o ./release/_microscope_app_cpp.so ./release/.obj/*.o -L/usr/lib/x86_64-linux-gnu -lqscintilla2_qt6 -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK -L/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib -lpython3.11 -lpthread -ldl -lutil -lm -L/usr/lib/x86_64-linux-gnu -lnvinfer -lnvinfer_plugin -L/usr/local/cuda/targets/x86_64-linux/lib -lcudart -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
+	 g++ -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/.venv/lib/python3.11/site-packages/PySide6/Qt/lib -shared -o ./release/_microscope_app_cpp.so ./release/.obj/*.o -L/usr/lib/x86_64-linux-gnu -lqscintilla2_qt6 -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK -L/usr/lib/python3.12/config-3.12-x86_64-linux-gnu -L/usr/lib/x86_64-linux-gnu -lpython3.12 -ldl -lm -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
 
 Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qmake.conf /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/common/unix.conf \
@@ -386,21 +266,6 @@ Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qma
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/common/g++-base.conf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/common/g++-unix.conf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/qconfig.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_KUserFeedbackCoreQt6.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_KUserFeedbackWidgetsQt6.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3danimation.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dcore.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dextras.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dinput.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dlogic.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquick.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickanimation.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickextras.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickinput.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickrender.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickscene2d.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3drender.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_bluetooth.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_charts.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_chartsqml.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_concurrent.pri \
@@ -413,8 +278,6 @@ Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qma
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_dbus.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_dbus_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_designer.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_designer_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_designercomponents_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_devicediscovery_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_eglfs_kms_gbm_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_eglfs_kms_support_private.pri \
@@ -423,160 +286,63 @@ Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qma
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_gui.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_gui_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_help.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_help_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_httpserver.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_hunspellinputmethod.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_input_support_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_jsonrpc_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_kms_support_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsanimation.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsanimation_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsfolderlistmodel.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsfolderlistmodel_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsqmlmodels.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsqmlmodels_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssettings.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssettings_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssharedimage.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssharedimage_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labswavefrontmesh.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labswavefrontmesh_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_languageserver_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_linguist.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_linguist_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_multimedia.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_multimediawidgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_network.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_network_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_networkauth.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_nfc.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_opengl.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_opengl_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_openglwidgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_openglwidgets_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_packetprotocol_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_pdf.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_pdfquick.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_pdfwidgets.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_positioning.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_positioningquick.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_printsupport.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_printsupport_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qml.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qml_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlcompiler_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlcore.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlcore_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmldebug_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmldom_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlintegration.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlintegration_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmllocalstorage.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmllocalstorage_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlmodels.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlmodels_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmltest.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmltest_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlworkerscript.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlworkerscript_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlxmllistmodel.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlxmllistmodel_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3d.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3d_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetimport.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetimport_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetutils.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetutils_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3deffects.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3deffects_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dglslparser_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dhelpers.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dhelpers_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3diblbaker.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3diblbaker_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticleeffects.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticleeffects_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticles.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticles_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dphysics.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dphysicshelpers.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3druntimerender.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3druntimerender_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dutils.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dutils_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2impl.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2impl_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrolstestutilsprivate_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2quickimpl.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2quickimpl_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2utils.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2utils_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicklayouts.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicklayouts_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickparticles_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickshapes_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktemplates2.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktemplates2_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktestutilsprivate_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktimeline.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktimeline_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickwidgets.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickwidgets_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_remoteobjects.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_remoteobjectsqml.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_repparser.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_scxml.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_scxmlqml.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sensors.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sensorsquick.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_serialbus.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_serialport.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_shadertools.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_shadertools_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_spatialaudio.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sql.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sql_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_statemachine.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_statemachineqml.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_svg.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_svgwidgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_testlib.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_testlib_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_texttospeech.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_tools_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_uiplugin.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_uitools.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_uitools_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_virtualkeyboard.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_wayland_egl_client_hw_integration_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_wayland_egl_compositor_hw_integration_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandclient.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandclient_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandcompositor.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandcompositor_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandglobal_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webchannel.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginecore.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginecore_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequick.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequick_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequickdelegatesqml.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequickdelegatesqml_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginewidgets.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginewidgets_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_websockets.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_websockets_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webview.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webviewquick.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_widgets.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_widgets_private.pri \
-		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_wl_shell_integration_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_xcb_qpa_lib_private.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_xml.pri \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_xml_private.pri \
@@ -620,21 +386,6 @@ Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qma
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/common/g++-base.conf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/common/g++-unix.conf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/qconfig.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_KUserFeedbackCoreQt6.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_KUserFeedbackWidgetsQt6.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3danimation.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dcore.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dextras.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dinput.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dlogic.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquick.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickanimation.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickextras.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickinput.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickrender.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3dquickscene2d.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_3drender.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_bluetooth.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_charts.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_chartsqml.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_concurrent.pri:
@@ -647,8 +398,6 @@ Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qma
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_dbus.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_dbus_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_designer.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_designer_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_designercomponents_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_devicediscovery_support_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_eglfs_kms_gbm_support_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_eglfs_kms_support_private.pri:
@@ -657,160 +406,63 @@ Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qma
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_gui.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_gui_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_help.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_help_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_httpserver.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_hunspellinputmethod.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_input_support_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_jsonrpc_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_kms_support_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsanimation.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsanimation_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsfolderlistmodel.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsfolderlistmodel_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsqmlmodels.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labsqmlmodels_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssettings.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssettings_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssharedimage.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labssharedimage_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labswavefrontmesh.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_labswavefrontmesh_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_languageserver_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_linguist.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_linguist_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_multimedia.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_multimediawidgets.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_network.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_network_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_networkauth.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_nfc.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_opengl.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_opengl_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_openglwidgets.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_openglwidgets_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_packetprotocol_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_pdf.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_pdfquick.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_pdfwidgets.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_positioning.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_positioningquick.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_printsupport.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_printsupport_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qml.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qml_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlcompiler_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlcore.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlcore_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmldebug_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmldom_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlintegration.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlintegration_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmllocalstorage.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmllocalstorage_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlmodels.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlmodels_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmltest.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmltest_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlworkerscript.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlworkerscript_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlxmllistmodel.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_qmlxmllistmodel_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3d.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3d_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetimport.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetimport_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetutils.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dassetutils_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3deffects.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3deffects_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dglslparser_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dhelpers.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dhelpers_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3diblbaker.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3diblbaker_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticleeffects.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticleeffects_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticles.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dparticles_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dphysics.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dphysicshelpers.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3druntimerender.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3druntimerender_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dutils.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick3dutils_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quick_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2impl.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrols2impl_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickcontrolstestutilsprivate_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2quickimpl.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2quickimpl_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2utils.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickdialogs2utils_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicklayouts.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicklayouts_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickparticles_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickshapes_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktemplates2.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktemplates2_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktestutilsprivate_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktimeline.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quicktimeline_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickwidgets.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_quickwidgets_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_remoteobjects.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_remoteobjectsqml.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_repparser.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_scxml.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_scxmlqml.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sensors.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sensorsquick.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_serialbus.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_serialport.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_shadertools.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_shadertools_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_spatialaudio.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sql.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_sql_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_statemachine.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_statemachineqml.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_svg.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_svgwidgets.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_testlib.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_testlib_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_texttospeech.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_tools_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_uiplugin.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_uitools.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_uitools_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_virtualkeyboard.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_wayland_egl_client_hw_integration_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_wayland_egl_compositor_hw_integration_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandclient.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandclient_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandcompositor.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandcompositor_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_waylandglobal_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webchannel.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginecore.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginecore_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequick.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequick_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequickdelegatesqml.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginequickdelegatesqml_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginewidgets.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webenginewidgets_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_websockets.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_websockets_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webview.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_webviewquick.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_widgets.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_widgets_private.pri:
-/usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_wl_shell_integration_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_xcb_qpa_lib_private.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_xml.pri:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/modules/qt_lib_xml_private.pri:
@@ -859,8 +511,8 @@ distdir: FORCE
 	@test -d $(DISTDIR) || mkdir -p $(DISTDIR)
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents src/microscope_app/MainWindow.h src/cnc_control_panel_qobject/src/CNCControlPanel.h src/mosaic_panel_qobject/src/MosaicWidget.h src/mosaic_panel_qobject/src/MosaicPanel.h src/intensity_chart_qobject/src/IntensityChart.h src/color_picker_widget_qobject/src/ColorPickerWidget.h src/led_controller_qobject/src/LEDController.h src/scan_config_paneL_qobject/src/ScanConfigPanel.h src/yolo_inference_qobject/src/YOLOInferenceWorker.h src/editor_qobject/src/PythonScintillaEditor.h src/mindvision_qobject/src/MindVisionCamera.h src/mindvision_qobject/src/VideoThread.h src/mindvision_qobject/src/mindvision_qobject_global.h src/serial_qobject/src/SerialWorker.h $(DISTDIR)/
-	$(COPY_FILE) --parents src/microscope_app/main.cpp src/microscope_app/MainWindow.cpp src/microscope_app/microscope_app_python.cpp src/cnc_control_panel_qobject/src/CNCControlPanel.cpp src/mosaic_panel_qobject/src/MosaicWidget.cpp src/mosaic_panel_qobject/src/MosaicPanel.cpp src/intensity_chart_qobject/src/IntensityChart.cpp src/color_picker_widget_qobject/src/ColorPickerWidget.cpp src/led_controller_qobject/src/LEDController.cpp src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp src/editor_qobject/src/PythonScintillaEditor.cpp src/mindvision_qobject/src/MindVisionCamera.cpp src/mindvision_qobject/src/VideoThread.cpp src/serial_qobject/src/SerialWorker.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents src/microscope_app/MainWindow.h src/cnc_control_panel_qobject/src/CNCControlPanel.h src/mosaic_panel_qobject/src/MosaicWidget.h src/mosaic_panel_qobject/src/MosaicPanel.h src/intensity_chart_qobject/src/IntensityChart.h src/color_picker_widget_qobject/src/ColorPickerWidget.h src/led_controller_qobject/src/LEDController.h src/scan_config_paneL_qobject/src/ScanConfigPanel.h src/editor_qobject/src/PythonScintillaEditor.h src/mindvision_qobject/src/MindVisionCamera.h src/mindvision_qobject/src/VideoThread.h src/mindvision_qobject/src/mindvision_qobject_global.h src/serial_qobject/src/SerialWorker.h $(DISTDIR)/
+	$(COPY_FILE) --parents src/microscope_app/main.cpp src/microscope_app/MainWindow.cpp src/microscope_app/microscope_app_python.cpp src/cnc_control_panel_qobject/src/CNCControlPanel.cpp src/mosaic_panel_qobject/src/MosaicWidget.cpp src/mosaic_panel_qobject/src/MosaicPanel.cpp src/intensity_chart_qobject/src/IntensityChart.cpp src/color_picker_widget_qobject/src/ColorPickerWidget.cpp src/led_controller_qobject/src/LEDController.cpp src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp src/editor_qobject/src/PythonScintillaEditor.cpp src/mindvision_qobject/src/MindVisionCamera.cpp src/mindvision_qobject/src/VideoThread.cpp src/serial_qobject/src/SerialWorker.cpp $(DISTDIR)/
 	$(COPY_FILE) --parents src/microscope_app/MainWindow.ui $(DISTDIR)/
 
 
@@ -891,81 +543,75 @@ compiler_moc_predefs_make_all: release/.moc/moc_predefs.h
 compiler_moc_predefs_clean:
 	-$(DEL_FILE) release/.moc/moc_predefs.h
 release/.moc/moc_predefs.h: /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
-	g++ -pipe -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -O2 -std=gnu++2a -Wall -Wextra -fPIC -dM -E -o release/.moc/moc_predefs.h /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
+	g++ -pipe -I/usr/include/python3.12 -I/usr/include/python3.12 -O2 -std=gnu++2a -Wall -Wextra -fPIC -dM -E -o release/.moc/moc_predefs.h /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
 
-compiler_moc_header_make_all: release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
+compiler_moc_header_make_all: release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
 compiler_moc_header_clean:
-	-$(DEL_FILE) release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
+	-$(DEL_FILE) release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
 release/.moc/moc_MainWindow.cpp: src/microscope_app/MainWindow.h \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/microscope_app/MainWindow.h -o release/.moc/moc_MainWindow.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/microscope_app/MainWindow.h -o release/.moc/moc_MainWindow.cpp
 
 release/.moc/moc_CNCControlPanel.cpp: src/cnc_control_panel_qobject/src/CNCControlPanel.h \
 		src/serial_qobject/src/SerialWorker.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/cnc_control_panel_qobject/src/CNCControlPanel.h -o release/.moc/moc_CNCControlPanel.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/cnc_control_panel_qobject/src/CNCControlPanel.h -o release/.moc/moc_CNCControlPanel.cpp
 
 release/.moc/moc_MosaicWidget.cpp: src/mosaic_panel_qobject/src/MosaicWidget.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mosaic_panel_qobject/src/MosaicWidget.h -o release/.moc/moc_MosaicWidget.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mosaic_panel_qobject/src/MosaicWidget.h -o release/.moc/moc_MosaicWidget.cpp
 
 release/.moc/moc_MosaicPanel.cpp: src/mosaic_panel_qobject/src/MosaicPanel.h \
 		src/mosaic_panel_qobject/src/MosaicWidget.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mosaic_panel_qobject/src/MosaicPanel.h -o release/.moc/moc_MosaicPanel.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mosaic_panel_qobject/src/MosaicPanel.h -o release/.moc/moc_MosaicPanel.cpp
 
 release/.moc/moc_IntensityChart.cpp: src/intensity_chart_qobject/src/IntensityChart.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/intensity_chart_qobject/src/IntensityChart.h -o release/.moc/moc_IntensityChart.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/intensity_chart_qobject/src/IntensityChart.h -o release/.moc/moc_IntensityChart.cpp
 
 release/.moc/moc_ColorPickerWidget.cpp: src/color_picker_widget_qobject/src/ColorPickerWidget.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/color_picker_widget_qobject/src/ColorPickerWidget.h -o release/.moc/moc_ColorPickerWidget.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/color_picker_widget_qobject/src/ColorPickerWidget.h -o release/.moc/moc_ColorPickerWidget.cpp
 
 release/.moc/moc_LEDController.cpp: src/led_controller_qobject/src/LEDController.h \
 		src/serial_qobject/src/SerialWorker.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/led_controller_qobject/src/LEDController.h -o release/.moc/moc_LEDController.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/led_controller_qobject/src/LEDController.h -o release/.moc/moc_LEDController.cpp
 
 release/.moc/moc_ScanConfigPanel.cpp: src/scan_config_paneL_qobject/src/ScanConfigPanel.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/scan_config_paneL_qobject/src/ScanConfigPanel.h -o release/.moc/moc_ScanConfigPanel.cpp
-
-release/.moc/moc_YOLOInferenceWorker.cpp: src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
-		release/.moc/moc_predefs.h \
-		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/yolo_inference_qobject/src/YOLOInferenceWorker.h -o release/.moc/moc_YOLOInferenceWorker.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/scan_config_paneL_qobject/src/ScanConfigPanel.h -o release/.moc/moc_ScanConfigPanel.cpp
 
 release/.moc/moc_PythonScintillaEditor.cpp: src/editor_qobject/src/PythonScintillaEditor.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/editor_qobject/src/PythonScintillaEditor.h -o release/.moc/moc_PythonScintillaEditor.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/editor_qobject/src/PythonScintillaEditor.h -o release/.moc/moc_PythonScintillaEditor.cpp
 
 release/.moc/moc_MindVisionCamera.cpp: src/mindvision_qobject/src/MindVisionCamera.h \
 		src/mindvision_qobject/src/mindvision_qobject_global.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mindvision_qobject/src/MindVisionCamera.h -o release/.moc/moc_MindVisionCamera.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mindvision_qobject/src/MindVisionCamera.h -o release/.moc/moc_MindVisionCamera.cpp
 
 release/.moc/moc_VideoThread.cpp: src/mindvision_qobject/src/VideoThread.h \
 		src/mindvision_qobject/src/mindvision_qobject_global.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mindvision_qobject/src/VideoThread.h -o release/.moc/moc_VideoThread.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mindvision_qobject/src/VideoThread.h -o release/.moc/moc_VideoThread.cpp
 
 release/.moc/moc_SerialWorker.cpp: src/serial_qobject/src/SerialWorker.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/serial_qobject/src/SerialWorker.h -o release/.moc/moc_SerialWorker.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/serial_qobject/src/SerialWorker.h -o release/.moc/moc_SerialWorker.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
@@ -981,7 +627,7 @@ release/.moc/MindVisionCamera.moc: src/mindvision_qobject/src/MindVisionCamera.c
 		src/mindvision_qobject/Include/CameraStatus.h \
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mindvision_qobject/src/MindVisionCamera.cpp -o release/.moc/MindVisionCamera.moc
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mindvision_qobject/src/MindVisionCamera.cpp -o release/.moc/MindVisionCamera.moc
 
 compiler_uic_make_all: release/.ui/ui_MainWindow.h
 compiler_uic_clean:
@@ -1004,12 +650,10 @@ compiler_clean: compiler_moc_predefs_clean compiler_moc_header_clean compiler_mo
 
 ####### Compile
 
-release/.obj/main.o: src/microscope_app/main.cpp src/microscope_app/MainWindow.h \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.h
+release/.obj/main.o: src/microscope_app/main.cpp src/microscope_app/MainWindow.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/main.o src/microscope_app/main.cpp
 
 release/.obj/MainWindow.o: src/microscope_app/MainWindow.cpp src/microscope_app/MainWindow.h \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
 		release/.ui/ui_MainWindow.h \
 		src/mindvision_qobject/src/MindVisionCamera.h \
 		src/mindvision_qobject/src/mindvision_qobject_global.h \
@@ -1025,8 +669,7 @@ release/.obj/MainWindow.o: src/microscope_app/MainWindow.cpp src/microscope_app/
 		src/editor_qobject/src/PythonScintillaEditor.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/MainWindow.o src/microscope_app/MainWindow.cpp
 
-release/.obj/microscope_app_python.o: src/microscope_app/microscope_app_python.cpp src/microscope_app/MainWindow.h \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.h
+release/.obj/microscope_app_python.o: src/microscope_app/microscope_app_python.cpp src/microscope_app/MainWindow.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/microscope_app_python.o src/microscope_app/microscope_app_python.cpp
 
 release/.obj/CNCControlPanel.o: src/cnc_control_panel_qobject/src/CNCControlPanel.cpp src/cnc_control_panel_qobject/src/CNCControlPanel.h \
@@ -1052,18 +695,6 @@ release/.obj/LEDController.o: src/led_controller_qobject/src/LEDController.cpp s
 
 release/.obj/ScanConfigPanel.o: src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp src/scan_config_paneL_qobject/src/ScanConfigPanel.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/ScanConfigPanel.o src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp
-
-release/.obj/YOLOInferenceWorker.o: src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
-		/usr/local/cuda/targets/x86_64-linux/include/cuda_runtime_api.h \
-		/usr/local/cuda/targets/x86_64-linux/include/crt/host_defines.h \
-		/usr/local/cuda/targets/x86_64-linux/include/builtin_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/device_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/driver_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/vector_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/surface_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/texture_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/cuda_device_runtime_api.h
-	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/YOLOInferenceWorker.o src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp
 
 release/.obj/PythonScintillaEditor.o: src/editor_qobject/src/PythonScintillaEditor.cpp src/editor_qobject/src/PythonScintillaEditor.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/PythonScintillaEditor.o src/editor_qobject/src/PythonScintillaEditor.cpp
@@ -1108,9 +739,6 @@ release/.obj/moc_LEDController.o: release/.moc/moc_LEDController.cpp
 
 release/.obj/moc_ScanConfigPanel.o: release/.moc/moc_ScanConfigPanel.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_ScanConfigPanel.o release/.moc/moc_ScanConfigPanel.cpp
-
-release/.obj/moc_YOLOInferenceWorker.o: release/.moc/moc_YOLOInferenceWorker.cpp 
-	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_YOLOInferenceWorker.o release/.moc/moc_YOLOInferenceWorker.cpp
 
 release/.obj/moc_PythonScintillaEditor.o: release/.moc/moc_PythonScintillaEditor.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_PythonScintillaEditor.o release/.moc/moc_PythonScintillaEditor.cpp

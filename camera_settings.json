@@ -1,8 +1,8 @@
 {
     "auto_exposure": false,
     "cnc_controller_port": "",
-    "exposure_time": 0.2,
-    "gain": 5,
-    "led_controller_port": "ttyS0",
-    "ruler_calibration": 2007
+    "exposure_time": 0.1,
+    "gain": 8,
+    "led_controller_port": "ttyUSB0",
+    "ruler_calibration": 2059.826579813503
 }

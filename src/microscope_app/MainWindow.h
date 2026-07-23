@@ -43,11 +43,6 @@ class QsciScintilla;
 struct _object;
 typedef _object PyObject;
 
-// Include for Detection struct (needed for std::vector<Detection>)
-#include "YOLOInferenceWorker.h"
-
-class YOLOInferenceWorker;  // Forward declare again for the member pointer
-
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -97,11 +92,6 @@ private slots:
     void updateFps(double fps);
     void handleError(QString message);
 
-    // YOLO inference
-    void onYoloToggled(bool checked);
-    void onDetectionsReady(const std::vector<Detection> &detections);
-    void onYoloError(const QString &message);
-
     // Python console
     void startPythonInterpreter();
     void stopPythonInterpreter();
@@ -140,8 +130,9 @@ private:
     void runPythonScriptEditorContents();
     void toggleCenterViewTab();
     void repositionPipOverlays();
-    void startScanRowRecording(int rowNumber);
-    void stopScanRowRecording();
+    void startScanRecording();
+    void stopScanRecording(bool completed);
+    bool setupNextScanRegion();
     double monotonicNowSec() const;
     void addPoseSample(double x, double y, double timestampSec);
     bool interpolatedPoseAt(double timestampSec, double &xOut, double &yOut) const;
@@ -158,10 +149,9 @@ private:
     void loadSettings();
     void saveSettings();
     void loadStageSettings();
-    void writeScanMetadataFile(int imageWidth, int imageHeight) const;
-    void appendScanRowFrameMetadata(int imageWidth, int imageHeight,
-                                    double frameTimestampSec, double stageX, double stageY);
-    void writeScanRowMetadataFile(int rowNumber, bool completed);
+    void writeScanMetadataFile(int imageWidth, int imageHeight, bool completed);
+    void appendScanFrameMetadata(int imageWidth, int imageHeight,
+                                 double frameTimestampSec, double stageX, double stageY);
     void initializeScanCompositeBuffer(int imageWidth, int imageHeight);
     void resetScanCompositeBuffer();
     void updateScanCompositeBuffer(const QImage &image, double stageXmm, double stageYmm);
@@ -194,6 +184,8 @@ private:
     double m_currentCncYMm = 0.0;
     QString m_cncState = "Idle";
     bool m_isScanning = false;
+    QVector<QRectF> m_scanRegions;
+    int m_scanRegionIndex = 0;
     int m_scanCurrentRow = 0;
     int m_scanTotalRows = 0;
     // Column-based scanning variables
@@ -211,11 +203,11 @@ private:
     double m_scanFovXMm = 0, m_scanFovYMm = 0;
     QString m_scanVideoOutputDir;
     qint64 m_scanSessionTimestamp = 0;
-    bool m_scanRowRecordingActive = false;
-    bool m_scanRowCaptureEnabled = false;
-    int m_scanRecordingRowNumber = 0;
-    QString m_scanRowVideoFilename;
-    double m_scanRowRecordFps = 0.0;
+    bool m_scanRecordingActive = false;
+    bool m_scanCaptureEnabled = false;
+    int m_scanCaptureSegmentNumber = 0;
+    QString m_scanVideoFilename;
+    double m_scanRecordFps = 0.0;
     QImage m_scanCompositeImage;
     QImage m_scanCompositeCoverage;
     int m_scanCompositeWidthPx = 0;
@@ -223,15 +215,16 @@ private:
     int m_scanCompositeSourceFrameWidthPx = 0;
     int m_scanCompositeSourceFrameHeightPx = 0;
 
-    struct ScanRowFrameMetadata {
+    struct ScanFrameMetadata {
         int frameIndex = 0;
+        int segmentNumber = 0;
         int imageWidthPx = 0;
         int imageHeightPx = 0;
         double frameTimestampSec = 0.0;
         double stageXmm = 0.0;
         double stageYmm = 0.0;
     };
-    std::vector<ScanRowFrameMetadata> m_scanRowFrameMetadata;
+    std::vector<ScanFrameMetadata> m_scanFrameMetadata;
 
     struct PoseSample {
         double timestampSec = 0.0;
@@ -240,13 +233,6 @@ private:
     };
     QElapsedTimer m_poseClock;
     std::deque<PoseSample> m_poseSamples;
-
-    // YOLO Inference / Tardigrade tracking
-    YOLOInferenceWorker *m_yoloWorker = nullptr;
-    std::vector<Detection> m_latestDetections;
-    bool m_yoloInferenceActive = false;
-    float m_yoloConfThreshold = 0.5f;
-    QAction *m_actionYoloInference = nullptr;
 
     // Python interpreter console
     bool m_pythonInitialized = false;

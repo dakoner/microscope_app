@@ -13,7 +13,6 @@ INCLUDEPATH += . \
                ../mosaic_panel_qobject/src \
                ../scan_config_paneL_qobject/src \
                ../editor_qobject/src \
-               ../yolo_inference_qobject/src \
                ../mindvision_qobject/src \
                ../mindvision_qobject/Include \
                /usr/include/x86_64-linux-gnu/qt6/Qsci

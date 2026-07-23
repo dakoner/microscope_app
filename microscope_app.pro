@@ -49,8 +49,7 @@ INCLUDEPATH += \
     $$SRC_DIR/intensity_chart_qobject/src \
     $$SRC_DIR/mosaic_panel_qobject/src \
     $$SRC_DIR/editor_qobject/src \
-    $$SRC_DIR/scan_config_paneL_qobject/src \
-    $$SRC_DIR/yolo_inference_qobject/src
+    $$SRC_DIR/scan_config_paneL_qobject/src
 
 # Library paths
 LIBS += -L$$MVSDK_LIB -lMVSDK
@@ -86,34 +85,6 @@ exists($$PYSIDE_QT_LIB/libQt6Core.so.6) {
     QMAKE_LFLAGS += -Wl,-rpath,$$PYSIDE_QT_LIB
 }
 
-# TensorRT runtime (engine inference backend)
-TENSORRT_INCLUDE = /usr/include/x86_64-linux-gnu
-TENSORRT_LIB = /usr/lib/x86_64-linux-gnu
-INCLUDEPATH += $$TENSORRT_INCLUDE
-LIBS += -L$$TENSORRT_LIB -lnvinfer -lnvinfer_plugin
-QMAKE_LFLAGS += -Wl,-rpath,$$TENSORRT_LIB
-
-# CUDA toolkit headers/libraries required by TensorRT headers/runtime.
-CUDA_INCLUDE = /usr/local/cuda/targets/x86_64-linux/include
-CUDA_LIB = /usr/local/cuda/targets/x86_64-linux/lib
-
-!exists($$CUDA_INCLUDE/cuda_runtime_api.h): CUDA_INCLUDE = /usr/local/cuda-13.2/targets/x86_64-linux/include
-!exists($$CUDA_LIB/libcudart.so): CUDA_LIB = /usr/local/cuda-13.2/targets/x86_64-linux/lib
-
-!exists($$CUDA_INCLUDE/cuda_runtime_api.h): CUDA_INCLUDE = /usr/local/cuda-13.1/targets/x86_64-linux/include
-!exists($$CUDA_LIB/libcudart.so): CUDA_LIB = /usr/local/cuda-13.1/targets/x86_64-linux/lib
-
-exists($$CUDA_INCLUDE/cuda_runtime_api.h) {
-    INCLUDEPATH += $$CUDA_INCLUDE
-}
-
-exists($$CUDA_LIB/libcudart.so) {
-    LIBS += -L$$CUDA_LIB -lcudart
-    QMAKE_LFLAGS += -Wl,-rpath,$$CUDA_LIB
-} else {
-    LIBS += -lcudart
-}
-
 # Preprocessor definitions
 DEFINES += MINDVISION_QOBJECT_LIBRARY
 
@@ -129,7 +100,6 @@ SOURCES += \
     $$SRC_DIR/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
     $$SRC_DIR/led_controller_qobject/src/LEDController.cpp \
     $$SRC_DIR/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
-    $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
     $$SRC_DIR/editor_qobject/src/PythonScintillaEditor.cpp \
     $$SRC_DIR/mindvision_qobject/src/MindVisionCamera.cpp \
     $$SRC_DIR/mindvision_qobject/src/VideoThread.cpp \
@@ -144,7 +114,6 @@ HEADERS += \
     $$SRC_DIR/color_picker_widget_qobject/src/ColorPickerWidget.h \
     $$SRC_DIR/led_controller_qobject/src/LEDController.h \
     $$SRC_DIR/scan_config_paneL_qobject/src/ScanConfigPanel.h \
-    $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.h \
     $$SRC_DIR/editor_qobject/src/PythonScintillaEditor.h \
     $$SRC_DIR/mindvision_qobject/src/MindVisionCamera.h \
     $$SRC_DIR/mindvision_qobject/src/VideoThread.h \
