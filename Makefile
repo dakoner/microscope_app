@@ -39,7 +39,7 @@ COMPRESS      = gzip -9f
 DISTNAME      = microscope_app1.0.0
 DISTDIR = /home/davidek/src/microtools/microscope_app/release/.obj/microscope_app1.0.0
 LINK          = g++
-LFLAGS        = -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/.venv/lib/python3.11/site-packages/PySide6/Qt/lib -Wl,-rpath,/usr/lib/x86_64-linux-gnu -Wl,-rpath,/usr/local/cuda/targets/x86_64-linux/lib -Wl,-O1 -Wl,-rpath-link,/usr/lib/x86_64-linux-gnu
+LFLAGS        = -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -Wl,-rpath,/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib -Wl,-rpath,/home/davidek/src/microtools/microscope_app/.venv/lib/python3.11/site-packages/PySide6/Qt/lib -Wl,-rpath,/usr/lib/x86_64-linux-gnu -Wl,-rpath,/usr/local/cuda/targets/x86_64-linux/lib -Wl,-O1 -Wl,-rpath-link,/usr/lib/x86_64-linux-gnu
 LIBS          = $(SUBLIBS) -L/usr/lib/x86_64-linux-gnu -lqscintilla2_qt6 -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK -L/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib -lpython3.11 -ldl -lutil -lm -lnvinfer -lnvinfer_plugin -L/usr/local/cuda/targets/x86_64-linux/lib -lcudart -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL   
 AR            = ar cqs
 RANLIB        = 
@@ -375,7 +375,7 @@ release/microscope_app: release/.ui/ui_MainWindow.h $(OBJECTS)
 	@test -d release/ || mkdir -p release/
 	$(LINK) $(LFLAGS) -o $(TARGET)  $(OBJECTS) $(OBJCOMP) $(LIBS)
 	rm -f ./release/_microscope_app_cpp.so 
-	 g++ -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/.venv/lib/python3.11/site-packages/PySide6/Qt/lib -Wl,-rpath,/usr/lib/x86_64-linux-gnu -Wl,-rpath,/usr/local/cuda/targets/x86_64-linux/lib -shared -o ./release/_microscope_app_cpp.so ./release/.obj/*.o -L/usr/lib/x86_64-linux-gnu -lqscintilla2_qt6 -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK -L/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib -lpython3.11 -lpthread -ldl -lutil -lm -L/usr/lib/x86_64-linux-gnu -lnvinfer -lnvinfer_plugin -L/usr/local/cuda/targets/x86_64-linux/lib -lcudart -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
+	 g++ -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -Wl,-rpath,/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib -Wl,-rpath,/home/davidek/src/microtools/microscope_app/.venv/lib/python3.11/site-packages/PySide6/Qt/lib -Wl,-rpath,/usr/lib/x86_64-linux-gnu -Wl,-rpath,/usr/local/cuda/targets/x86_64-linux/lib -shared -o ./release/_microscope_app_cpp.so ./release/.obj/*.o -L/usr/lib/x86_64-linux-gnu -lqscintilla2_qt6 -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK -L/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib -lpython3.11 -lpthread -ldl -lutil -lm -L/usr/lib/x86_64-linux-gnu -lnvinfer -lnvinfer_plugin -L/usr/local/cuda/targets/x86_64-linux/lib -lcudart -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
 
 Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qmake.conf /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/common/unix.conf \
@@ -1011,17 +1011,17 @@ release/.obj/main.o: src/microscope_app/main.cpp src/microscope_app/MainWindow.h
 release/.obj/MainWindow.o: src/microscope_app/MainWindow.cpp src/microscope_app/MainWindow.h \
 		src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
 		release/.ui/ui_MainWindow.h \
+		src/cnc_control_panel_qobject/src/CNCControlPanel.h \
+		src/serial_qobject/src/SerialWorker.h \
+		src/color_picker_widget_qobject/src/ColorPickerWidget.h \
+		src/intensity_chart_qobject/src/IntensityChart.h \
 		src/mindvision_qobject/src/MindVisionCamera.h \
 		src/mindvision_qobject/src/mindvision_qobject_global.h \
 		src/mindvision_qobject/src/VideoThread.h \
-		src/cnc_control_panel_qobject/src/CNCControlPanel.h \
-		src/serial_qobject/src/SerialWorker.h \
 		src/led_controller_qobject/src/LEDController.h \
 		src/mosaic_panel_qobject/src/MosaicPanel.h \
 		src/mosaic_panel_qobject/src/MosaicWidget.h \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.h \
-		src/intensity_chart_qobject/src/IntensityChart.h \
-		src/color_picker_widget_qobject/src/ColorPickerWidget.h \
 		src/editor_qobject/src/PythonScintillaEditor.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/MainWindow.o src/microscope_app/MainWindow.cpp
 

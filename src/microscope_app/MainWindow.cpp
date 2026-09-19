@@ -472,7 +472,7 @@ MainWindow::MainWindow(QWidget *parent)
         // Recording
         if (m_videoThread->isRunning())
             m_videoThread->addFrame(image);
-        if (m_scanVideoThread->isRunning() && m_scanRowCaptureEnabled)
+        if (m_scanVideoThread->isRunning() && m_scanCaptureEnabled)
             m_scanVideoThread->addFrame(image);
 
         // Temporarily unthrottled: process every frame.
@@ -1241,7 +1241,7 @@ void MainWindow::onStopClicked()
 {
     m_paramPollTimer.stop();
     m_isCameraRunning = false;
-    stopScanRowRecording();
+    stopScanRecording(false);
     if (m_videoThread->isRunning())
         onRecordClicked();
 
@@ -1342,8 +1342,8 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
     double poseY = m_currentCncYMm;
     interpolatedPoseAt(frameTimestampSec, poseX, poseY);
 
-    if (m_scanRowRecordingActive && m_scanRowCaptureEnabled) {
-        appendScanRowFrameMetadata(image.width(), image.height(), frameTimestampSec, poseX, poseY);
+    if (m_scanRecordingActive && m_scanCaptureEnabled) {
+        appendScanFrameMetadata(image.width(), image.height(), frameTimestampSec, poseX, poseY);
     }
 
     const bool shouldUpdateMosaicOverlay =
@@ -1352,7 +1352,7 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
     // During scan acquisition, only stitch frames that are inside the active row recording window.
     const bool shouldStitchMosaicFrame =
         shouldUpdateMosaicOverlay &&
-        (!m_isScanning || (m_scanRowRecordingActive && m_scanRowCaptureEnabled));
+        (!m_isScanning || (m_scanRecordingActive && m_scanCaptureEnabled));
 
     if (shouldUpdateMosaicOverlay) {
         m_mosaicPanel->updateMosaic(image, poseX, poseY, shouldStitchMosaicFrame);
@@ -1924,53 +1924,30 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
                             bool serpentine, int feedrate)
 {
     if (!m_cncControlPanel || areas.isEmpty()) return;
-    QRectF area = areas.first();
 
-    int imgW = m_currentPixmap.width();
-    int imgH = m_currentPixmap.height();
-
-    m_scanXMin = area.x();
-    m_scanYMin = area.y();
-    m_scanXMax = area.x() + area.width();
-    m_scanYMax = area.y() + area.height();
+    m_scanRegions = areas;
+    m_scanRegionIndex = 0;
     m_scanHomeX = homeX;
     m_scanHomeY = homeY;
     m_scanSerpentine = serpentine;
     m_scanFeedrate = feedrate;
+    m_isScanning = true;
+
+    int imgW = m_currentPixmap.width();
+    int imgH = m_currentPixmap.height();
 
     // Swap axes: scan along Y for each X-column
     m_scanFovXMm = imgH / m_rulerCalibration;
     m_scanFovYMm = imgW / m_rulerCalibration;
     m_scanStepX = m_scanFovXMm * 0.75;
 
-    double scanWidth = m_scanXMax - m_scanXMin;
-    m_scanTotalCols = m_scanStepX > 0 ? static_cast<int>(scanWidth / m_scanStepX) : 0;
-    m_scanTotalRows = m_scanTotalCols;
-    m_scanCurrentRow = 0;
-    m_scanCurrentCol = 0;
-    m_scanCurrentX = m_scanXMin + (m_scanFovXMm / 2.0);
-    m_scanIsFirstStrip = true;
-    m_isScanning = true;
-    resetScanCompositeBuffer();
-    initializeScanCompositeBuffer(imgW, imgH);
-    m_scanSessionTimestamp = QDateTime::currentSecsSinceEpoch();
-    QDir videosDir(resolveOutputBaseDir());
-    videosDir.mkpath(".");
-    m_scanVideoOutputDir = videosDir.filePath(QString("scan_%1").arg(m_scanSessionTimestamp));
-    QDir().mkpath(m_scanVideoOutputDir);
-    log(QString("Scan output directory: %1").arg(QDir(m_scanVideoOutputDir).absolutePath()));
-    writeScanMetadataFile(imgW, imgH);
-
     m_cncControlPanel->sendCommand("G90");
     m_cncControlPanel->sendCommand(QString("F%1").arg(m_scanFeedrate));
-
-    log(QString("Starting Mosaic Scan: %1 columns.").arg(m_scanTotalCols));
-    if (m_scanPanel) {
-        m_scanPanel->updateStatus(QString("Starting scan of %1 columns.").arg(m_scanTotalCols));
-        m_scanPanel->updateProgress(0, m_scanTotalCols);
+    if (!setupNextScanRegion()) {
+        m_isScanning = false;
+        if (m_scanPanel)
+            m_scanPanel->scanFinished(false);
     }
-
-    scanNextRow(); // Will be renamed to scanNextColumn
 }
 
 void MainWindow::scanNextRow()
@@ -1979,11 +1956,11 @@ void MainWindow::scanNextRow()
 
     // Now scan along Y for each X-column
     if (m_scanCurrentCol < m_scanTotalCols) {
-        startScanRowRecording(m_scanCurrentCol + 1);
-
+        m_scanCaptureSegmentNumber = m_scanCurrentCol + 1;
+        const int travelFeedrate = m_cncControlPanel->feedrate();
         double xTarget = m_scanCurrentX;
-        double startY = m_scanYMax - (m_scanFovYMm / 2.0);
-        double endY = m_scanYMin + (m_scanFovYMm / 2.0);
+        double startY = m_scanYMin + (m_scanFovYMm / 2.0);
+        double endY = m_scanYMax - (m_scanFovYMm / 2.0);
         bool reverseCol = m_scanSerpentine && (m_scanCurrentCol % 2 == 1);
         double colStartY = reverseCol ? endY : startY;
         double colEndY = reverseCol ? startY : endY;
@@ -2001,11 +1978,19 @@ void MainWindow::scanNextRow()
             m_cncControlPanel->sendCommand("$HX");
 
         if (m_scanHomeX || m_scanHomeY) {
-            m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(xTarget, 0, 'f', 3).arg(colStartY, 0, 'f', 3));
+            m_cncControlPanel->sendCommand(
+                QString("G1 X%1 Y%2 F%3")
+                    .arg(xTarget, 0, 'f', 3)
+                    .arg(colStartY, 0, 'f', 3)
+                    .arg(travelFeedrate));
         }
         m_cncControlPanel->sendCommand("G4 P0");
         m_cncControlPanel->sendCommand("__SCAN_ROW_START__");
-        m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2").arg(xTarget, 0, 'f', 3).arg(colEndY, 0, 'f', 3));
+        m_cncControlPanel->sendCommand(
+            QString("G1 X%1 Y%2 F%3")
+                .arg(xTarget, 0, 'f', 3)
+                .arg(colEndY, 0, 'f', 3)
+                .arg(m_scanFeedrate));
         m_cncControlPanel->sendCommand("G4 P0");
         m_cncControlPanel->sendCommand("__SCAN_ROW_END__");
 
@@ -2018,16 +2003,17 @@ void MainWindow::scanNextRow()
 
 void MainWindow::onScanRowStartReady()
 {
-    if (!m_scanRowRecordingActive)
+    if (!m_scanRecordingActive)
         return;
 
-    m_scanRowCaptureEnabled = true;
+    m_scanCaptureEnabled = true;
 }
 
 void MainWindow::onRowFinished()
 {
     if (!m_isScanning) return;
-    stopScanRowRecording();
+    m_scanCaptureEnabled = false;
+    m_scanCaptureSegmentNumber = 0;
     m_scanCurrentRow++;
     if (m_scanPanel)
         m_scanPanel->updateProgress(m_scanCurrentRow, m_scanTotalRows);
@@ -2038,7 +2024,9 @@ void MainWindow::cancelScan()
 {
     if (!m_isScanning) return;
     m_isScanning = false;
-    stopScanRowRecording();
+    stopScanRecording(false);
+    m_scanRegions.clear();
+    m_scanRegionIndex = 0;
     resetScanCompositeBuffer();
     if (m_cncControlPanel) {
         m_cncControlPanel->sendCommand("!");
@@ -2052,21 +2040,83 @@ void MainWindow::cancelScan()
 void MainWindow::onScanFinished()
 {
     if (!m_isScanning) return;
-    m_isScanning = false;
-    stopScanRowRecording();
+    stopScanRecording(true);
     saveScanCompositeBuffer();
     resetScanCompositeBuffer();
+    m_scanRegionIndex++;
+    if (setupNextScanRegion())
+        return;
+
+    m_isScanning = false;
+    m_scanRegions.clear();
+    m_scanRegionIndex = 0;
     log("Mosaic scan finished.");
     if (m_scanPanel)
         m_scanPanel->scanFinished(true);
 }
 
-void MainWindow::startScanRowRecording(int rowNumber)
+bool MainWindow::setupNextScanRegion()
+{
+    if (!m_isScanning || m_scanRegionIndex < 0 || m_scanRegionIndex >= m_scanRegions.size())
+        return false;
+
+    const QRectF area = m_scanRegions.at(m_scanRegionIndex);
+    const int imgW = m_currentPixmap.width();
+    const int imgH = m_currentPixmap.height();
+
+    m_scanXMin = area.x();
+    m_scanYMin = area.y();
+    m_scanXMax = area.x() + area.width();
+    m_scanYMax = area.y() + area.height();
+
+    const double scanWidth = m_scanXMax - m_scanXMin;
+    m_scanTotalCols = m_scanStepX > 0 ? static_cast<int>(scanWidth / m_scanStepX) : 0;
+    m_scanTotalRows = m_scanTotalCols;
+    m_scanCurrentRow = 0;
+    m_scanCurrentCol = 0;
+    m_scanCurrentX = m_scanXMin + (m_scanFovXMm / 2.0);
+    m_scanIsFirstStrip = true;
+
+    resetScanCompositeBuffer();
+    initializeScanCompositeBuffer(imgW, imgH);
+    m_scanSessionTimestamp = QDateTime::currentSecsSinceEpoch();
+    QDir videosDir(resolveOutputBaseDir());
+    videosDir.mkpath(".");
+    m_scanVideoOutputDir = videosDir.filePath(
+        QString("scan_region_%1_%2")
+            .arg(m_scanRegionIndex + 1, 2, 10, QChar('0'))
+            .arg(m_scanSessionTimestamp));
+    QDir().mkpath(m_scanVideoOutputDir);
+    log(QString("Scan output directory: %1").arg(QDir(m_scanVideoOutputDir).absolutePath()));
+    m_scanFrameMetadata.clear();
+    m_scanVideoFilename.clear();
+    m_scanRecordFps = 0.0;
+    writeScanMetadataFile(imgW, imgH, false);
+
+    log(QString("Starting Mosaic Scan region %1/%2: %3 columns.")
+            .arg(m_scanRegionIndex + 1)
+            .arg(m_scanRegions.size())
+            .arg(m_scanTotalCols));
+    if (m_scanPanel) {
+        m_scanPanel->updateStatus(
+            QString("Scanning region %1/%2 (%3 columns).")
+                .arg(m_scanRegionIndex + 1)
+                .arg(m_scanRegions.size())
+                .arg(m_scanTotalCols));
+        m_scanPanel->updateProgress(0, m_scanTotalCols);
+    }
+
+    startScanRecording();
+    scanNextRow();
+    return true;
+}
+
+void MainWindow::startScanRecording()
 {
     if (!m_scanVideoThread || !m_isCameraRunning || m_currentImage.isNull())
         return;
 
-    stopScanRowRecording();
+    stopScanRecording(false);
 
     if (m_scanVideoOutputDir.isEmpty()) {
         QDir videosDir(resolveOutputBaseDir());
@@ -2079,25 +2129,21 @@ void MainWindow::startScanRowRecording(int rowNumber)
     }
 
     double recordFps = m_currentFps > 0.1 ? m_currentFps : 30.0;
-    QString filename = QDir(m_scanVideoOutputDir)
-                           .filePath(QString("row_%1.mkv").arg(rowNumber, 4, 10, QChar('0')));
+    QString filename = QDir(m_scanVideoOutputDir).filePath("scan_capture.mkv");
 
     m_scanVideoThread->startRecording(m_currentImage.width(), m_currentImage.height(),
                                       recordFps, filename);
-    m_scanRowRecordingActive = true;
-    m_scanRowCaptureEnabled = false;
-    m_scanRecordingRowNumber = rowNumber;
-    m_scanRowVideoFilename = QFileInfo(filename).fileName();
-    m_scanRowRecordFps = recordFps;
-    m_scanRowFrameMetadata.clear();
-    log(QString("Row %1 recording started: %2")
-            .arg(rowNumber)
-            .arg(QFileInfo(filename).fileName()));
+    m_scanRecordingActive = true;
+    m_scanCaptureEnabled = false;
+    m_scanCaptureSegmentNumber = 0;
+    m_scanVideoFilename = QFileInfo(filename).fileName();
+    m_scanRecordFps = recordFps;
+    m_scanFrameMetadata.clear();
+    log(QString("Scan recording started: %1").arg(QFileInfo(filename).fileName()));
 }
 
-void MainWindow::stopScanRowRecording()
+void MainWindow::stopScanRecording(bool completed)
 {
-    const int rowNumber = m_scanRecordingRowNumber;
     const bool hadVideoRecording = m_scanVideoThread && m_scanVideoThread->isRunning();
 
     if (hadVideoRecording) {
@@ -2105,22 +2151,21 @@ void MainWindow::stopScanRowRecording()
         m_scanVideoThread->wait(5000);
     }
 
-    if (rowNumber > 0) {
-        writeScanRowMetadataFile(rowNumber, hadVideoRecording);
+    if (!m_scanVideoOutputDir.isEmpty() && !m_currentImage.isNull()) {
+        writeScanMetadataFile(m_currentImage.width(), m_currentImage.height(), completed);
     }
 
-    m_scanRowRecordingActive = false;
-    m_scanRowCaptureEnabled = false;
-    m_scanRecordingRowNumber = 0;
-    m_scanRowVideoFilename.clear();
-    m_scanRowRecordFps = 0.0;
-    m_scanRowFrameMetadata.clear();
+    m_scanRecordingActive = false;
+    m_scanCaptureEnabled = false;
+    m_scanCaptureSegmentNumber = 0;
 
-    if (hadVideoRecording && rowNumber > 0)
-        log(QString("Row %1 recording saved.").arg(rowNumber));
+    if (hadVideoRecording) {
+        log(QString("Scan recording %1.")
+                .arg(completed ? "saved" : "stopped"));
+    }
 }
 
-void MainWindow::writeScanMetadataFile(int imageWidth, int imageHeight) const
+void MainWindow::writeScanMetadataFile(int imageWidth, int imageHeight, bool completed)
 {
     if (m_scanVideoOutputDir.isEmpty())
         return;
@@ -2164,8 +2209,31 @@ void MainWindow::writeScanMetadataFile(int imageWidth, int imageHeight) const
     root["serpentine"] = m_scanSerpentine;
     root["home_x"] = m_scanHomeX;
     root["home_y"] = m_scanHomeY;
+    root["completed"] = completed;
+    root["region_index"] = m_scanRegionIndex + 1;
+    root["region_count"] = m_scanRegions.size();
     root["video_directory"] = QFileInfo(m_scanVideoOutputDir).fileName();
     root["video_directory_absolute"] = QDir(m_scanVideoOutputDir).absolutePath();
+    root["video_file"] = m_scanVideoFilename;
+    root["record_fps"] = m_scanRecordFps;
+    root["frame_count"] = static_cast<int>(m_scanFrameMetadata.size());
+
+    QJsonArray frames;
+    for (const auto &frame : m_scanFrameMetadata) {
+        QJsonObject obj;
+        obj["frame_index"] = frame.frameIndex;
+        obj["segment_number"] = frame.segmentNumber;
+        obj["timestamp_sec"] = frame.frameTimestampSec;
+        obj["stage_x_mm"] = frame.stageXmm;
+        obj["stage_y_mm"] = frame.stageYmm;
+
+        QJsonObject imageSizeEntry;
+        imageSizeEntry["width"] = frame.imageWidthPx;
+        imageSizeEntry["height"] = frame.imageHeightPx;
+        obj["image_size_px"] = imageSizeEntry;
+        frames.append(obj);
+    }
+    root["frames"] = frames;
 
     QString metaPath = QDir(m_scanVideoOutputDir).filePath("scan_metadata.json");
     log(QString("[DEBUG] Writing scan metadata: %1").arg(metaPath));
@@ -2178,59 +2246,18 @@ void MainWindow::writeScanMetadataFile(int imageWidth, int imageHeight) const
     log(QString("[DEBUG] scan_metadata.json written OK: %1").arg(metaPath));
 }
 
-void MainWindow::appendScanRowFrameMetadata(int imageWidth, int imageHeight,
-                                            double frameTimestampSec, double stageX, double stageY)
+void MainWindow::appendScanFrameMetadata(int imageWidth, int imageHeight,
+                                         double frameTimestampSec, double stageX, double stageY)
 {
-    ScanRowFrameMetadata entry;
-    entry.frameIndex = static_cast<int>(m_scanRowFrameMetadata.size());
+    ScanFrameMetadata entry;
+    entry.frameIndex = static_cast<int>(m_scanFrameMetadata.size());
+    entry.segmentNumber = m_scanCaptureSegmentNumber;
     entry.imageWidthPx = imageWidth;
     entry.imageHeightPx = imageHeight;
     entry.frameTimestampSec = frameTimestampSec;
     entry.stageXmm = stageX;
     entry.stageYmm = stageY;
-    m_scanRowFrameMetadata.push_back(entry);
-}
-
-void MainWindow::writeScanRowMetadataFile(int rowNumber, bool completed)
-{
-    if (m_scanVideoOutputDir.isEmpty() || rowNumber <= 0)
-        return;
-
-    QJsonObject root;
-    root["row_number"] = rowNumber;
-    root["completed"] = completed;
-    root["created_utc"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
-    root["video_file"] = m_scanRowVideoFilename;
-    root["record_fps"] = m_scanRowRecordFps;
-    root["frame_count"] = static_cast<int>(m_scanRowFrameMetadata.size());
-    root["video_directory_absolute"] = QDir(m_scanVideoOutputDir).absolutePath();
-
-    QJsonArray frames;
-    for (const auto &frame : m_scanRowFrameMetadata) {
-        QJsonObject obj;
-        obj["frame_index"] = frame.frameIndex;
-        obj["timestamp_sec"] = frame.frameTimestampSec;
-        obj["stage_x_mm"] = frame.stageXmm;
-        obj["stage_y_mm"] = frame.stageYmm;
-
-        QJsonObject imageSize;
-        imageSize["width"] = frame.imageWidthPx;
-        imageSize["height"] = frame.imageHeightPx;
-        obj["image_size_px"] = imageSize;
-        frames.append(obj);
-    }
-    root["frames"] = frames;
-
-    QString rowMetaPath = QDir(m_scanVideoOutputDir)
-        .filePath(QString("row_%1_metadata.json").arg(rowNumber, 4, 10, QChar('0')));
-    log(QString("[DEBUG] Writing row metadata: %1").arg(rowMetaPath));
-    QFile file(rowMetaPath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        log(QString("Row metadata error: could not write %1").arg(file.fileName()));
-        return;
-    }
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-    log(QString("[DEBUG] row metadata written OK: %1").arg(rowMetaPath));
+    m_scanFrameMetadata.push_back(entry);
 }
 
 void MainWindow::initializeScanCompositeBuffer(int imageWidth, int imageHeight)

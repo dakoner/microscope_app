@@ -54,6 +54,7 @@ INCLUDEPATH += \
 
 # Library paths
 LIBS += -L$$MVSDK_LIB -lMVSDK
+QMAKE_LFLAGS += -Wl,-rpath,$$MVSDK_LIB
 
 # Python + pybind11 headers
 PYTHON_BIN = $$PWD/.venv/bin/python
@@ -61,6 +62,7 @@ PYTHON_BIN = $$PWD/.venv/bin/python
 isEmpty(PYTHON_BIN): PYTHON_BIN = python3
 
 PYTHON_REAL = $$system(readlink -f $$PYTHON_BIN)
+PYTHON_LIBDIR = $$replace(PYTHON_REAL, /bin/[^/]+$, /lib)
 PYTHON_CONFIG = $$PYTHON_REAL-config
 !exists($$PYTHON_CONFIG): PYTHON_CONFIG = $$PWD/.venv/bin/python3-config
 !exists($$PYTHON_CONFIG): PYTHON_CONFIG = $$system(command -v python3-config)
@@ -73,6 +75,10 @@ PY_LDFLAGS = $$system($$PYTHON_CONFIG --embed --ldflags 2>/dev/null)
 isEmpty(PY_LDFLAGS): PY_LDFLAGS = $$system($$PYTHON_CONFIG --ldflags 2>/dev/null)
 QMAKE_CXXFLAGS += $$PY_CFLAGS
 LIBS += $$PY_LDFLAGS
+
+!isEmpty(PYTHON_LIBDIR) {
+    QMAKE_LFLAGS += -Wl,-rpath,$$PYTHON_LIBDIR
+}
 
 PYBIND11_INCLUDES = $$system($$PYTHON_BIN -m pybind11 --includes 2>/dev/null)
 !isEmpty(PYBIND11_INCLUDES) {
