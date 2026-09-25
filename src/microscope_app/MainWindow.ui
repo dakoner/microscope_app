@@ -54,9 +54,10 @@
                  </item>
                  <item row="2" column="1">
                   <widget class="QDoubleSpinBox" name="m_spinExposureTime">
-                   <property name="minimum"><double>0.010000000000000</double></property>
+                   <property name="minimum"><double>0.001000000000000</double></property>
                    <property name="maximum"><double>15000.000000000000000</double></property>
-                   <property name="decimals"><number>1</number></property>
+                   <property name="decimals"><number>3</number></property>
+                   <property name="singleStep"><double>0.001000000000000</double></property>
                   </widget>
                  </item>
                  <item row="3" column="0" colspan="2">

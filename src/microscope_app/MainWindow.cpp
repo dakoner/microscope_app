@@ -52,6 +52,11 @@
 
 static MainWindow *g_mainWindowForPython = nullptr;
 
+namespace {
+constexpr double kMinimumExposureMs = 0.001;
+constexpr double kExposureSliderStepMs = 0.001;
+}
+
 // ---------- helpers ----------
 
 static double nowSec()
@@ -1411,13 +1416,16 @@ void MainWindow::syncUi()
 {
     double minExp, maxExp;
     m_camera->getExposureTimeRange(minExp, maxExp);
-    double stepExp = m_camera->getExposureTimeStep();
 
+    // Keep fine-grained controls available even when the SDK reports a coarser
+    // preferred step.  The camera returns the actual value after it applies any
+    // hardware-specific quantization.
+    minExp = kMinimumExposureMs;
+    m_spinExposureTime->setDecimals(3);
+    m_spinExposureTime->setSingleStep(kExposureSliderStepMs);
     m_spinExposureTime->setRange(minExp, maxExp);
-    if (stepExp > 0)
-        m_sliderExposure->setRange(0, static_cast<int>((maxExp - minExp) / stepExp));
-    else
-        m_sliderExposure->setRange(0, 10000);
+    m_sliderExposure->setRange(
+        0, static_cast<int>(std::round((maxExp - minExp) / kExposureSliderStepMs)));
 
     int minGain, maxGain;
     m_camera->getAnalogGainRange(minGain, maxGain);
@@ -1459,11 +1467,9 @@ void MainWindow::syncUi()
 void MainWindow::updateSliderFromTime(double current, double minVal, double maxVal)
 {
     m_sliderExposure->blockSignals(true);
-    double stepExp = m_camera->getExposureTimeStep();
-    if (stepExp > 0)
-        m_sliderExposure->setValue(static_cast<int>(std::round((current - minVal) / stepExp)));
-    else if (maxVal > minVal)
-        m_sliderExposure->setValue(static_cast<int>((current - minVal) / (maxVal - minVal) * 10000));
+    if (maxVal > minVal)
+        m_sliderExposure->setValue(
+            static_cast<int>(std::round((current - minVal) / kExposureSliderStepMs)));
     m_sliderExposure->blockSignals(false);
 }
 
@@ -1480,7 +1486,7 @@ void MainWindow::pollCameraParams()
 
     double curExp = m_camera->getExposureTime();
     if (!m_sliderExposure->isSliderDown() && !m_spinExposureTime->hasFocus()) {
-        if (std::abs(m_spinExposureTime->value() - curExp) > 1.0) {
+        if (std::abs(m_spinExposureTime->value() - curExp) >= kExposureSliderStepMs / 2.0) {
             m_spinExposureTime->blockSignals(true);
             m_spinExposureTime->setValue(curExp);
             m_spinExposureTime->blockSignals(false);
@@ -1539,14 +1545,7 @@ void MainWindow::onExposureTimeChanged(double value)
 void MainWindow::onExposureSliderChanged(int value)
 {
     double minExp = m_spinExposureTime->minimum();
-    double stepExp = m_camera->getExposureTimeStep();
-    double newTime;
-    if (stepExp > 0) {
-        newTime = minExp + value * stepExp;
-    } else {
-        double maxExp = m_spinExposureTime->maximum();
-        newTime = minExp + (value / 10000.0) * (maxExp - minExp);
-    }
+    double newTime = minExp + value * kExposureSliderStepMs;
     m_spinExposureTime->setValue(newTime);
 }
 
