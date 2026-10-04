@@ -46,6 +46,7 @@
 #include "MosaicPanel.h"
 #include "ScanConfigPanel.h"
 #include "IntensityChart.h"
+#include "HistogramWidget.h"
 #include "ColorPickerWidget.h"
 #include "YOLOInferenceWorker.h"
 #include "PythonScintillaEditor.h"
@@ -366,6 +367,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_btnRulerCalibrate = ui->m_btnRulerCalibrate;
     m_chkShowProfile = ui->m_chkShowProfile;
     m_intensityChart = ui->m_intensityChart;
+    m_histogramWidget = ui->m_histogramWidget;
     m_tabColorPicker = ui->m_tabColorPicker;
     m_actionStartCamera = ui->m_actionStartCamera;
     m_actionStopCamera = ui->m_actionStopCamera;
@@ -383,6 +385,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Post-setup customization
     m_videoLabel->installEventFilter(this);
     m_videoLabel->setFocusPolicy(Qt::StrongFocus);
+    m_videoLabel->setMouseTracking(true);
     m_mainSplitter->setSizes({400, 1000});
     m_triggerBg->setId(m_rbContinuous, 0);
     m_triggerBg->setId(m_rbSoftware, 1);
@@ -1020,41 +1023,70 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         } else if (event->type() == QEvent::KeyPress) {
             keyPressEvent(static_cast<QKeyEvent *>(event));
             return true;
-        } else if (m_rulerActive) {
-            auto *me = dynamic_cast<QMouseEvent *>(event);
-            if (!me) return QMainWindow::eventFilter(watched, event);
-            if (event->type() == QEvent::MouseButtonPress && me->button() == Qt::LeftButton) {
+        } else if (event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            const QPointF pos = getImageCoords(me->position());
+            if (pos.x() >= 0 && pos.y() >= 0)
+                updateHistogramPointer(pos);
+            else {
+                m_hasHistogramPointer = false;
+                if (m_histogramWidget)
+                    m_histogramWidget->clearPointerIntensity();
+            }
+        } else if (event->type() == QEvent::Leave) {
+            m_hasHistogramPointer = false;
+            if (m_histogramWidget)
+                m_histogramWidget->clearPointerIntensity();
+        }
+
+        if (m_rulerActive) {
+            const auto eventType = event->type();
+            if (eventType == QEvent::MouseButtonPress ||
+                eventType == QEvent::MouseMove ||
+                eventType == QEvent::MouseButtonRelease) {
+                auto *me = static_cast<QMouseEvent *>(event);
+
+                if (eventType == QEvent::MouseButtonPress && me->button() == Qt::LeftButton) {
+                    QPointF pos = getImageCoords(me->position());
+                    if (pos.x() >= 0 && pos.y() >= 0) {
+                        m_rulerStart = pos;
+                        m_rulerEnd = pos;
+                        m_hasRulerStart = true;
+                        m_hasRulerEnd = true;
+                        m_videoLabel->grabMouse();
+                        updateRulerStats();
+                        refreshVideoLabel();
+                    }
+                } else if (eventType == QEvent::MouseMove && (me->buttons() & Qt::LeftButton)) {
                 QPointF pos = getImageCoords(me->position());
-                if (!pos.isNull()) {
-                    m_rulerStart = pos;
-                    m_rulerEnd = pos;
-                    m_hasRulerStart = true;
-                    m_hasRulerEnd = true;
-                    refreshVideoLabel();
-                }
-            } else if (event->type() == QEvent::MouseMove && (me->buttons() & Qt::LeftButton)) {
-                QPointF pos = getImageCoords(me->position());
-                if (!pos.isNull() && m_hasRulerStart) {
+                if (pos.x() >= 0 && pos.y() >= 0 && m_hasRulerStart) {
                     m_rulerEnd = pos;
                     m_hasRulerEnd = true;
                     updateRulerStats();
                     refreshVideoLabel();
                 }
-            } else if (event->type() == QEvent::MouseButtonRelease && me->button() == Qt::LeftButton) {
+                } else if (eventType == QEvent::MouseButtonRelease && me->button() == Qt::LeftButton) {
                 QPointF pos = getImageCoords(me->position());
-                if (!pos.isNull() && m_hasRulerStart) {
+                if (pos.x() >= 0 && pos.y() >= 0 && m_hasRulerStart) {
                     m_rulerEnd = pos;
                     m_hasRulerEnd = true;
                     updateRulerStats();
                     refreshVideoLabel();
                 }
+                    if (QWidget::mouseGrabber() == m_videoLabel)
+                        m_videoLabel->releaseMouse();
+                }
+
+                // A ruler gesture belongs to the measurement tool, not QLabel.
+                // Consuming it keeps the full press-drag-release sequence together.
+                return true;
             }
         } else if (m_colorPickerActive) {
             auto *me = dynamic_cast<QMouseEvent *>(event);
             if (me && (event->type() == QEvent::MouseMove ||
                        event->type() == QEvent::MouseButtonPress)) {
                 QPointF pos = getImageCoords(me->position());
-                if (!pos.isNull())
+                if (pos.x() >= 0 && pos.y() >= 0)
                     updateColorPicker(pos);
             }
         }
@@ -1191,13 +1223,13 @@ void MainWindow::refreshVideoLabel()
 
 QPointF MainWindow::getImageCoords(const QPointF &mousePos)
 {
-    if (m_currentPixmap.isNull()) return {};
+    if (m_currentPixmap.isNull()) return {-1, -1};
 
     double lblW = m_videoLabel->width();
     double lblH = m_videoLabel->height();
     double imgW = m_currentPixmap.width();
     double imgH = m_currentPixmap.height();
-    if (imgW == 0 || imgH == 0) return {};
+    if (imgW == 0 || imgH == 0) return {-1, -1};
 
     double scaleW = lblW / imgW;
     double scaleH = lblH / imgH;
@@ -1210,7 +1242,7 @@ QPointF MainWindow::getImageCoords(const QPointF &mousePos)
     double mx = mousePos.x();
     double my = mousePos.y();
     if (mx < offX || mx > offX + drawnW || my < offY || my > offY + drawnH)
-        return {};
+        return {-1, -1};
 
     return {(mx - offX) / scale, (my - offY) / scale};
 }
@@ -1327,6 +1359,9 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
 
     m_currentImage = image;
     m_currentPixmap = QPixmap::fromImage(m_currentImage);
+    updateHistogram(image);
+    if (m_hasHistogramPointer)
+        updateHistogramPointer(m_histogramPointer);
 
     if (m_videoPipLabel && !m_currentPixmap.isNull()) {
         m_videoPipLabel->setPixmap(m_currentPixmap.scaled(m_videoPipLabel->size(), Qt::KeepAspectRatio, Qt::FastTransformation));
@@ -1696,6 +1731,29 @@ void MainWindow::updateIntensityProfile(QPointF p1, QPointF p2, const QImage *im
         }
     }
     m_intensityChart->setData(data);
+}
+
+void MainWindow::updateHistogram(const QImage &image)
+{
+    if (m_histogramWidget)
+        m_histogramWidget->setImage(image);
+}
+
+void MainWindow::updateHistogramPointer(const QPointF &pos)
+{
+    if (!m_histogramWidget || m_currentImage.isNull())
+        return;
+
+    const int x = static_cast<int>(pos.x());
+    const int y = static_cast<int>(pos.y());
+    if (x < 0 || y < 0 || x >= m_currentImage.width() || y >= m_currentImage.height())
+        return;
+
+    const QRgb pixel = m_currentImage.pixel(x, y);
+    const int luminance = (54 * qRed(pixel) + 183 * qGreen(pixel) + 19 * qBlue(pixel) + 128) >> 8;
+    m_histogramPointer = pos;
+    m_hasHistogramPointer = true;
+    m_histogramWidget->setPointerIntensity(x, y, luminance);
 }
 
 // ---------- Color Picker ----------

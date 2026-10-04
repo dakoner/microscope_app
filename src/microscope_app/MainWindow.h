@@ -36,6 +36,7 @@ class CNCControlPanel;
 class LEDController;
 class MosaicPanel;
 class IntensityChart;
+class HistogramWidget;
 class ScanConfigPanel;
 class ColorPickerWidget;
 class PythonScintillaEditor;
@@ -153,6 +154,8 @@ private:
     QPointF getImageCoords(const QPointF &mousePos);
     void updateRulerStats();
     void updateIntensityProfile(QPointF p1, QPointF p2, const QImage *image = nullptr);
+    void updateHistogram(const QImage &image);
+    void updateHistogramPointer(const QPointF &pos);
     void updateColorPicker(const QPointF &pos);
     void applyCameraSettings();
     void initMosaicPanel(bool forceRecreate = false);
@@ -180,6 +183,8 @@ private:
     std::uint64_t m_framesWrittenToMosaicCount = 0;
     QPixmap m_currentPixmap;
     QImage m_currentImage;
+    QPointF m_histogramPointer;
+    bool m_hasHistogramPointer = false;
     QSize m_lastVideoLabelSize;
 
     // Hardware
@@ -340,6 +345,7 @@ private:
     QPushButton *m_btnRulerCalibrate = nullptr;
     QCheckBox *m_chkShowProfile = nullptr;
     IntensityChart *m_intensityChart = nullptr;
+    HistogramWidget *m_histogramWidget = nullptr;
 
     // Color Picker
     ColorPickerWidget *m_tabColorPicker = nullptr;

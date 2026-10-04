@@ -132,6 +132,7 @@ SOURCES += \
     $$SRC_DIR/mosaic_panel_qobject/src/MosaicWidget.cpp \
     $$SRC_DIR/mosaic_panel_qobject/src/MosaicPanel.cpp \
     $$SRC_DIR/intensity_chart_qobject/src/IntensityChart.cpp \
+    $$SRC_DIR/intensity_chart_qobject/src/HistogramWidget.cpp \
     $$SRC_DIR/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
     $$SRC_DIR/led_controller_qobject/src/LEDController.cpp \
     $$SRC_DIR/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
@@ -147,6 +148,7 @@ HEADERS += \
     $$SRC_DIR/mosaic_panel_qobject/src/MosaicWidget.h \
     $$SRC_DIR/mosaic_panel_qobject/src/MosaicPanel.h \
     $$SRC_DIR/intensity_chart_qobject/src/IntensityChart.h \
+    $$SRC_DIR/intensity_chart_qobject/src/HistogramWidget.h \
     $$SRC_DIR/color_picker_widget_qobject/src/ColorPickerWidget.h \
     $$SRC_DIR/led_controller_qobject/src/LEDController.h \
     $$SRC_DIR/scan_config_paneL_qobject/src/ScanConfigPanel.h \

@@ -59,6 +59,7 @@ SOURCES       = src/microscope_app/main.cpp \
 		src/mosaic_panel_qobject/src/MosaicWidget.cpp \
 		src/mosaic_panel_qobject/src/MosaicPanel.cpp \
 		src/intensity_chart_qobject/src/IntensityChart.cpp \
+		src/intensity_chart_qobject/src/HistogramWidget.cpp \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
 		src/led_controller_qobject/src/LEDController.cpp \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
@@ -71,6 +72,7 @@ SOURCES       = src/microscope_app/main.cpp \
 		release/.moc/moc_MosaicWidget.cpp \
 		release/.moc/moc_MosaicPanel.cpp \
 		release/.moc/moc_IntensityChart.cpp \
+		release/.moc/moc_HistogramWidget.cpp \
 		release/.moc/moc_ColorPickerWidget.cpp \
 		release/.moc/moc_LEDController.cpp \
 		release/.moc/moc_ScanConfigPanel.cpp \
@@ -86,6 +88,7 @@ OBJECTS       = release/.obj/main.o \
 		release/.obj/MosaicWidget.o \
 		release/.obj/MosaicPanel.o \
 		release/.obj/IntensityChart.o \
+		release/.obj/HistogramWidget.o \
 		release/.obj/ColorPickerWidget.o \
 		release/.obj/LEDController.o \
 		release/.obj/ScanConfigPanel.o \
@@ -99,6 +102,7 @@ OBJECTS       = release/.obj/main.o \
 		release/.obj/moc_MosaicWidget.o \
 		release/.obj/moc_MosaicPanel.o \
 		release/.obj/moc_IntensityChart.o \
+		release/.obj/moc_HistogramWidget.o \
 		release/.obj/moc_ColorPickerWidget.o \
 		release/.obj/moc_LEDController.o \
 		release/.obj/moc_ScanConfigPanel.o \
@@ -340,6 +344,7 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		src/mosaic_panel_qobject/src/MosaicWidget.h \
 		src/mosaic_panel_qobject/src/MosaicPanel.h \
 		src/intensity_chart_qobject/src/IntensityChart.h \
+		src/intensity_chart_qobject/src/HistogramWidget.h \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.h \
 		src/led_controller_qobject/src/LEDController.h \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.h \
@@ -355,6 +360,7 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		src/mosaic_panel_qobject/src/MosaicWidget.cpp \
 		src/mosaic_panel_qobject/src/MosaicPanel.cpp \
 		src/intensity_chart_qobject/src/IntensityChart.cpp \
+		src/intensity_chart_qobject/src/HistogramWidget.cpp \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
 		src/led_controller_qobject/src/LEDController.cpp \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
@@ -859,8 +865,8 @@ distdir: FORCE
 	@test -d $(DISTDIR) || mkdir -p $(DISTDIR)
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents src/microscope_app/MainWindow.h src/cnc_control_panel_qobject/src/CNCControlPanel.h src/mosaic_panel_qobject/src/MosaicWidget.h src/mosaic_panel_qobject/src/MosaicPanel.h src/intensity_chart_qobject/src/IntensityChart.h src/color_picker_widget_qobject/src/ColorPickerWidget.h src/led_controller_qobject/src/LEDController.h src/scan_config_paneL_qobject/src/ScanConfigPanel.h src/yolo_inference_qobject/src/YOLOInferenceWorker.h src/editor_qobject/src/PythonScintillaEditor.h src/mindvision_qobject/src/MindVisionCamera.h src/mindvision_qobject/src/VideoThread.h src/mindvision_qobject/src/mindvision_qobject_global.h src/serial_qobject/src/SerialWorker.h $(DISTDIR)/
-	$(COPY_FILE) --parents src/microscope_app/main.cpp src/microscope_app/MainWindow.cpp src/microscope_app/microscope_app_python.cpp src/cnc_control_panel_qobject/src/CNCControlPanel.cpp src/mosaic_panel_qobject/src/MosaicWidget.cpp src/mosaic_panel_qobject/src/MosaicPanel.cpp src/intensity_chart_qobject/src/IntensityChart.cpp src/color_picker_widget_qobject/src/ColorPickerWidget.cpp src/led_controller_qobject/src/LEDController.cpp src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp src/editor_qobject/src/PythonScintillaEditor.cpp src/mindvision_qobject/src/MindVisionCamera.cpp src/mindvision_qobject/src/VideoThread.cpp src/serial_qobject/src/SerialWorker.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents src/microscope_app/MainWindow.h src/cnc_control_panel_qobject/src/CNCControlPanel.h src/mosaic_panel_qobject/src/MosaicWidget.h src/mosaic_panel_qobject/src/MosaicPanel.h src/intensity_chart_qobject/src/IntensityChart.h src/intensity_chart_qobject/src/HistogramWidget.h src/color_picker_widget_qobject/src/ColorPickerWidget.h src/led_controller_qobject/src/LEDController.h src/scan_config_paneL_qobject/src/ScanConfigPanel.h src/yolo_inference_qobject/src/YOLOInferenceWorker.h src/editor_qobject/src/PythonScintillaEditor.h src/mindvision_qobject/src/MindVisionCamera.h src/mindvision_qobject/src/VideoThread.h src/mindvision_qobject/src/mindvision_qobject_global.h src/serial_qobject/src/SerialWorker.h $(DISTDIR)/
+	$(COPY_FILE) --parents src/microscope_app/main.cpp src/microscope_app/MainWindow.cpp src/microscope_app/microscope_app_python.cpp src/cnc_control_panel_qobject/src/CNCControlPanel.cpp src/mosaic_panel_qobject/src/MosaicWidget.cpp src/mosaic_panel_qobject/src/MosaicPanel.cpp src/intensity_chart_qobject/src/IntensityChart.cpp src/intensity_chart_qobject/src/HistogramWidget.cpp src/color_picker_widget_qobject/src/ColorPickerWidget.cpp src/led_controller_qobject/src/LEDController.cpp src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp src/editor_qobject/src/PythonScintillaEditor.cpp src/mindvision_qobject/src/MindVisionCamera.cpp src/mindvision_qobject/src/VideoThread.cpp src/serial_qobject/src/SerialWorker.cpp $(DISTDIR)/
 	$(COPY_FILE) --parents src/microscope_app/MainWindow.ui $(DISTDIR)/
 
 
@@ -893,9 +899,9 @@ compiler_moc_predefs_clean:
 release/.moc/moc_predefs.h: /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
 	g++ -pipe -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -O2 -std=gnu++2a -Wall -Wextra -fPIC -dM -E -o release/.moc/moc_predefs.h /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
 
-compiler_moc_header_make_all: release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
+compiler_moc_header_make_all: release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_HistogramWidget.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
 compiler_moc_header_clean:
-	-$(DEL_FILE) release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
+	-$(DEL_FILE) release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_HistogramWidget.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
 release/.moc/moc_MainWindow.cpp: src/microscope_app/MainWindow.h \
 		src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
 		release/.moc/moc_predefs.h \
@@ -923,6 +929,11 @@ release/.moc/moc_IntensityChart.cpp: src/intensity_chart_qobject/src/IntensityCh
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
 	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/intensity_chart_qobject/src/IntensityChart.h -o release/.moc/moc_IntensityChart.cpp
+
+release/.moc/moc_HistogramWidget.cpp: src/intensity_chart_qobject/src/HistogramWidget.h \
+		release/.moc/moc_predefs.h \
+		/usr/lib/qt6/libexec/moc
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/intensity_chart_qobject/src/HistogramWidget.h -o release/.moc/moc_HistogramWidget.cpp
 
 release/.moc/moc_ColorPickerWidget.cpp: src/color_picker_widget_qobject/src/ColorPickerWidget.h \
 		release/.moc/moc_predefs.h \
@@ -990,6 +1001,7 @@ release/.ui/ui_MainWindow.h: src/microscope_app/MainWindow.ui \
 		/usr/lib/qt6/libexec/uic \
 		src/cnc_control_panel_qobject/src/CNCControlPanel.h \
 		src/intensity_chart_qobject/src/IntensityChart.h \
+		src/intensity_chart_qobject/src/HistogramWidget.h \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.h \
 		src/serial_qobject/src/SerialWorker.h
 	/usr/lib/qt6/libexec/uic src/microscope_app/MainWindow.ui -o release/.ui/ui_MainWindow.h
@@ -1014,6 +1026,7 @@ release/.obj/MainWindow.o: src/microscope_app/MainWindow.cpp src/microscope_app/
 		src/cnc_control_panel_qobject/src/CNCControlPanel.h \
 		src/serial_qobject/src/SerialWorker.h \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.h \
+		src/intensity_chart_qobject/src/HistogramWidget.h \
 		src/intensity_chart_qobject/src/IntensityChart.h \
 		src/mindvision_qobject/src/MindVisionCamera.h \
 		src/mindvision_qobject/src/mindvision_qobject_global.h \
@@ -1042,6 +1055,9 @@ release/.obj/MosaicPanel.o: src/mosaic_panel_qobject/src/MosaicPanel.cpp src/mos
 
 release/.obj/IntensityChart.o: src/intensity_chart_qobject/src/IntensityChart.cpp src/intensity_chart_qobject/src/IntensityChart.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/IntensityChart.o src/intensity_chart_qobject/src/IntensityChart.cpp
+
+release/.obj/HistogramWidget.o: src/intensity_chart_qobject/src/HistogramWidget.cpp src/intensity_chart_qobject/src/HistogramWidget.h
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/HistogramWidget.o src/intensity_chart_qobject/src/HistogramWidget.cpp
 
 release/.obj/ColorPickerWidget.o: src/color_picker_widget_qobject/src/ColorPickerWidget.cpp src/color_picker_widget_qobject/src/ColorPickerWidget.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/ColorPickerWidget.o src/color_picker_widget_qobject/src/ColorPickerWidget.cpp
@@ -1099,6 +1115,9 @@ release/.obj/moc_MosaicPanel.o: release/.moc/moc_MosaicPanel.cpp
 
 release/.obj/moc_IntensityChart.o: release/.moc/moc_IntensityChart.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_IntensityChart.o release/.moc/moc_IntensityChart.cpp
+
+release/.obj/moc_HistogramWidget.o: release/.moc/moc_HistogramWidget.cpp 
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_HistogramWidget.o release/.moc/moc_HistogramWidget.cpp
 
 release/.obj/moc_ColorPickerWidget.o: release/.moc/moc_ColorPickerWidget.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_ColorPickerWidget.o release/.moc/moc_ColorPickerWidget.cpp

@@ -362,6 +362,21 @@
              </item>
             </layout>
            </widget>
+
+           <!-- === Image Histogram Tab === -->
+           <widget class="QWidget" name="histogramPage">
+            <attribute name="title"><string>Histogram</string></attribute>
+            <layout class="QVBoxLayout" name="histogramLayout">
+             <item>
+              <widget class="QLabel" name="histogramDescription">
+               <property name="text"><string>Live luminance distribution (0–255)</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="HistogramWidget" name="m_histogramWidget"/>
+             </item>
+            </layout>
+           </widget>
     
            <!-- === Color Picker Tab === -->
            <widget class="ColorPickerWidget" name="m_tabColorPicker">
@@ -506,6 +521,11 @@
    <class>IntensityChart</class>
    <extends>QWidget</extends>
    <header>IntensityChart.h</header>
+  </customwidget>
+  <customwidget>
+   <class>HistogramWidget</class>
+   <extends>QWidget</extends>
+   <header>HistogramWidget.h</header>
   </customwidget>
   <customwidget>
    <class>ColorPickerWidget</class>
