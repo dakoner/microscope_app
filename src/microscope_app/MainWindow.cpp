@@ -24,6 +24,7 @@
 #include <QPen>
 #include <QColor>
 #include <QLineF>
+#include <QTransform>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -38,6 +39,8 @@
 
 #include <cmath>
 #include <ctime>
+#include <algorithm>
+#include <limits>
 
 #include "MindVisionCamera.h"
 #include "VideoThread.h"
@@ -166,6 +169,226 @@ static bool saveQImageAsBigTiff(const QImage &image, const QString &outputPath, 
         *errorMessage = failureReason;
 
     return ok;
+}
+
+struct AutorulerResult
+{
+    double pixelsPerMm = 0.0;
+    double micrometersPerPixel = 0.0;
+    double rotationDegrees = 0.0;
+    double medianTickSpacingPx = 0.0;
+    int tickCount = 0;
+    QImage annotatedPreview;
+};
+
+// Native Qt port of gemini-code-1791383218139.py.  It finds the dominant
+// ruler orientation, rotates the frame, isolates the tick-mark band, then
+// calculates the median minor-tick spacing.  A standard 1 mm calibration
+// slide has 100 minor divisions per millimetre.
+static bool detectAutoruler(const QImage &source, AutorulerResult &result, QString &error)
+{
+    constexpr double kDegreesPerRadian = 57.2957795130823208768;
+    const QImage gray = source.convertToFormat(QImage::Format_Grayscale8);
+    if (gray.width() < 8 || gray.height() < 8) {
+        error = "camera frame is too small";
+        return false;
+    }
+
+    const auto pixelAt = [](const QImage &image, int x, int y) {
+        return static_cast<double>(image.constScanLine(y)[x]);
+    };
+
+    constexpr int kAngleBins = 180;
+    std::vector<double> magnitudes(gray.width() * gray.height(), 0.0);
+    double maxMagnitude = 0.0;
+    for (int y = 1; y < gray.height() - 1; ++y) {
+        for (int x = 1; x < gray.width() - 1; ++x) {
+            const double gx = pixelAt(gray, x + 1, y - 1) + 2.0 * pixelAt(gray, x + 1, y)
+                            + pixelAt(gray, x + 1, y + 1) - pixelAt(gray, x - 1, y - 1)
+                            - 2.0 * pixelAt(gray, x - 1, y) - pixelAt(gray, x - 1, y + 1);
+            const double gy = pixelAt(gray, x - 1, y + 1) + 2.0 * pixelAt(gray, x, y + 1)
+                            + pixelAt(gray, x + 1, y + 1) - pixelAt(gray, x - 1, y - 1)
+                            - 2.0 * pixelAt(gray, x, y - 1) - pixelAt(gray, x + 1, y - 1);
+            const double magnitude = std::hypot(gx, gy);
+            magnitudes[y * gray.width() + x] = magnitude;
+            maxMagnitude = std::max(maxMagnitude, magnitude);
+        }
+    }
+    if (maxMagnitude <= std::numeric_limits<double>::epsilon()) {
+        error = "no edges found in the current camera frame";
+        return false;
+    }
+
+    std::vector<double> angleHistogram(kAngleBins, 0.0);
+    const double minMagnitude = maxMagnitude * 0.15;
+    for (int y = 1; y < gray.height() - 1; ++y) {
+        for (int x = 1; x < gray.width() - 1; ++x) {
+            const double magnitude = magnitudes[y * gray.width() + x];
+            if (magnitude <= minMagnitude)
+                continue;
+
+            const double gx = pixelAt(gray, x + 1, y) - pixelAt(gray, x - 1, y);
+            const double gy = pixelAt(gray, x, y + 1) - pixelAt(gray, x, y - 1);
+            double angle = std::atan2(gy, gx) * kDegreesPerRadian;
+            if (angle < 0.0)
+                angle += 180.0;
+            if (angle >= 180.0)
+                angle -= 180.0;
+            const int bin = std::min(kAngleBins - 1, static_cast<int>(angle));
+            angleHistogram[bin] += magnitude;
+        }
+    }
+
+    const int dominantBin = static_cast<int>(std::distance(
+        angleHistogram.begin(), std::max_element(angleHistogram.begin(), angleHistogram.end())));
+    result.rotationDegrees = static_cast<double>(dominantBin);
+    const QImage rotated = gray.transformed(QTransform().rotate(-result.rotationDegrees),
+                                             Qt::SmoothTransformation);
+    if (rotated.isNull()) {
+        error = "could not rotate the camera frame";
+        return false;
+    }
+
+    std::vector<double> rowSums(rotated.height(), 0.0);
+    double maxRowSum = 0.0;
+    for (int y = 1; y < rotated.height() - 1; ++y) {
+        for (int x = 1; x < rotated.width() - 1; ++x) {
+            const double horizontalEdge = std::abs(pixelAt(rotated, x + 1, y)
+                                                 - pixelAt(rotated, x - 1, y));
+            rowSums[y] += horizontalEdge;
+        }
+        maxRowSum = std::max(maxRowSum, rowSums[y]);
+    }
+    if (maxRowSum <= std::numeric_limits<double>::epsilon()) {
+        error = "could not find a ruler tick-mark band";
+        return false;
+    }
+
+    // Keep the strongest contiguous high-response rows so unrelated detail in
+    // the frame cannot stretch the sampling band over the entire image.
+    const double rowThreshold = maxRowSum * 0.4;
+    int bestStart = -1;
+    int bestEnd = -1;
+    double bestStrength = 0.0;
+    for (int y = 0; y < rotated.height();) {
+        if (rowSums[y] <= rowThreshold) {
+            ++y;
+            continue;
+        }
+        const int start = y;
+        double strength = 0.0;
+        while (y < rotated.height() && rowSums[y] > rowThreshold) {
+            strength += rowSums[y];
+            ++y;
+        }
+        if (strength > bestStrength) {
+            bestStrength = strength;
+            bestStart = start;
+            bestEnd = y - 1;
+        }
+    }
+    if (bestStart < 0 || bestEnd < bestStart) {
+        error = "could not isolate a ruler tick-mark band";
+        return false;
+    }
+
+    const int centerY = (bestStart + bestEnd) / 2;
+    const int bandHeight = std::max(3, static_cast<int>(std::lround((bestEnd - bestStart + 1) * 0.3)));
+    const int bandTop = std::max(0, centerY - bandHeight / 2);
+    const int bandBottom = std::min(rotated.height(), bandTop + bandHeight);
+    if (bandBottom - bandTop < 2) {
+        error = "detected ruler band is too narrow";
+        return false;
+    }
+
+    std::vector<double> profile(rotated.width(), 0.0);
+    double maxProfile = 0.0;
+    double minProfile = std::numeric_limits<double>::max();
+    for (int x = 0; x < rotated.width(); ++x) {
+        for (int y = bandTop; y < bandBottom; ++y)
+            profile[x] += 255.0 - pixelAt(rotated, x, y);
+        profile[x] /= static_cast<double>(bandBottom - bandTop);
+        minProfile = std::min(minProfile, profile[x]);
+    }
+    for (double &value : profile) {
+        value -= minProfile;
+        maxProfile = std::max(maxProfile, value);
+    }
+    if (maxProfile <= std::numeric_limits<double>::epsilon()) {
+        error = "could not find ruler tick marks";
+        return false;
+    }
+
+    const double peakThreshold = maxProfile * 0.15;
+    std::vector<double> peaks;
+    for (int x = 0; x < static_cast<int>(profile.size());) {
+        if (profile[x] < peakThreshold) {
+            ++x;
+            continue;
+        }
+        int peakX = x;
+        while (x < static_cast<int>(profile.size()) && profile[x] >= peakThreshold) {
+            if (profile[x] > profile[peakX])
+                peakX = x;
+            ++x;
+        }
+        peaks.push_back(static_cast<double>(peakX));
+    }
+    if (peaks.size() < 2) {
+        error = "not enough ruler ticks were detected";
+        return false;
+    }
+
+    result.annotatedPreview = rotated.convertToFormat(QImage::Format_ARGB32);
+    QPainter previewPainter(&result.annotatedPreview);
+    previewPainter.fillRect(QRect(0, bandTop, rotated.width(), bandBottom - bandTop),
+                            QColor(0, 140, 255, 65));
+    QPen bandPen(QColor(0, 190, 255), 2, Qt::DashLine);
+    previewPainter.setPen(bandPen);
+    previewPainter.drawLine(0, bandTop, rotated.width() - 1, bandTop);
+    previewPainter.drawLine(0, bandBottom - 1, rotated.width() - 1, bandBottom - 1);
+
+    QPen peakPen(QColor(255, 75, 75), 2);
+    previewPainter.setPen(peakPen);
+    for (const double peak : peaks) {
+        const int x = static_cast<int>(std::lround(peak));
+        previewPainter.drawLine(x, bandTop, x, bandBottom - 1);
+    }
+
+    const QString rotationText = QString("Auto-aligned: rotate %1°")
+        .arg(-result.rotationDegrees, 0, 'f', 1);
+    const QRect textBounds(8, 8,
+                           previewPainter.fontMetrics().horizontalAdvance(rotationText) + 16,
+                           previewPainter.fontMetrics().height() + 8);
+    previewPainter.fillRect(textBounds, QColor(0, 0, 0, 170));
+    previewPainter.setPen(Qt::white);
+    previewPainter.drawText(textBounds, Qt::AlignCenter, rotationText);
+    previewPainter.end();
+
+    std::vector<double> spacings;
+    spacings.reserve(peaks.size() - 1);
+    for (std::size_t i = 1; i < peaks.size(); ++i) {
+        const double spacing = peaks[i] - peaks[i - 1];
+        if (spacing > 0.0)
+            spacings.push_back(spacing);
+    }
+    if (spacings.empty()) {
+        error = "ruler tick spacing could not be calculated";
+        return false;
+    }
+    std::sort(spacings.begin(), spacings.end());
+    const std::size_t middle = spacings.size() / 2;
+    result.medianTickSpacingPx = spacings.size() % 2 == 0
+        ? (spacings[middle - 1] + spacings[middle]) / 2.0
+        : spacings[middle];
+    result.tickCount = static_cast<int>(peaks.size());
+    result.pixelsPerMm = result.medianTickSpacingPx * 100.0;
+    result.micrometersPerPixel = 1000.0 / result.pixelsPerMm;
+    if (!std::isfinite(result.pixelsPerMm) || result.pixelsPerMm <= 0.0) {
+        error = "invalid ruler calibration result";
+        return false;
+    }
+    return true;
 }
 
 static QImage orientScanCompositeFrame(const QImage &image)
@@ -365,6 +588,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_lblRulerCalib = ui->m_lblRulerCalib;
     m_lblRulerMeas = ui->m_lblRulerMeas;
     m_btnRulerCalibrate = ui->m_btnRulerCalibrate;
+    m_btnAutoRuler = ui->m_btnAutoRuler;
+    m_lblAutorulerResult = ui->m_lblAutorulerResult;
+    m_lblAutorulerPreview = ui->m_lblAutorulerPreview;
     m_chkShowProfile = ui->m_chkShowProfile;
     m_intensityChart = ui->m_intensityChart;
     m_histogramWidget = ui->m_histogramWidget;
@@ -582,6 +808,7 @@ void MainWindow::connectSignals()
 
     // Ruler
     connect(m_btnRulerCalibrate, &QPushButton::clicked, this, &MainWindow::calibrateRuler);
+    connect(m_btnAutoRuler, &QPushButton::clicked, this, &MainWindow::autoCalibrateRuler);
     connect(m_chkShowProfile, &QCheckBox::toggled, this, &MainWindow::onShowProfileToggled);
 
     // PiP repositioning on tab change
@@ -1675,6 +1902,53 @@ void MainWindow::calibrateRuler()
     m_rulerCalibration = pxDist / knownMm;
     m_lblRulerCalib->setText(QString("%1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
     log(QString("Ruler Calibrated: %1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
+    updateRulerStats();
+    initMosaicPanel(true);
+}
+
+void MainWindow::autoCalibrateRuler()
+{
+    if (m_currentImage.isNull()) {
+        log("Autoruler: no camera frame is available.");
+        m_lblAutorulerResult->setText("Autoruler failed: no camera frame is available.");
+        m_lblAutorulerPreview->clear();
+        return;
+    }
+
+    AutorulerResult result;
+    QString error;
+    if (!detectAutoruler(m_currentImage, result, error)) {
+        log(QString("Autoruler failed: %1.").arg(error));
+        m_lblAutorulerResult->setText(QString("Autoruler failed: %1.").arg(error));
+        m_lblAutorulerPreview->clear();
+        return;
+    }
+
+    m_rulerCalibration = result.pixelsPerMm;
+    m_lblRulerCalib->setText(QString("%1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
+    m_lblAutorulerResult->setText(
+        QString("Rotation applied: %1°  |  Peaks: %2  |  Median spacing: %3 px\n"
+                "Calibration: %4 px/mm  (%5 μm/px)")
+            .arg(-result.rotationDegrees, 0, 'f', 1)
+            .arg(result.tickCount)
+            .arg(result.medianTickSpacingPx, 0, 'f', 2)
+            .arg(result.pixelsPerMm, 0, 'f', 2)
+            .arg(result.micrometersPerPixel, 0, 'f', 4));
+    m_lblAutorulerPreview->setPixmap(QPixmap::fromImage(result.annotatedPreview).scaled(
+        m_lblAutorulerPreview->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+    const QString autorulerOutputPath = QDir::current().absoluteFilePath("autoruler.png");
+    if (result.annotatedPreview.save(autorulerOutputPath, "PNG")) {
+        log(QString("Autoruler result image saved: %1").arg(autorulerOutputPath));
+    } else {
+        log(QString("Autoruler warning: could not save %1").arg(autorulerOutputPath));
+    }
+    log(QString("Autoruler calibrated: %1 px/mm (%2 μm/px; %3 ticks; %4 px median spacing; %5° rotation)")
+            .arg(result.pixelsPerMm, 0, 'f', 2)
+            .arg(result.micrometersPerPixel, 0, 'f', 4)
+            .arg(result.tickCount)
+            .arg(result.medianTickSpacingPx, 0, 'f', 2)
+            .arg(result.rotationDegrees, 0, 'f', 1));
     updateRulerStats();
     initMosaicPanel(true);
 }

@@ -111,6 +111,7 @@ private slots:
     // Ruler / Measurement
     void onRulerToggled(bool checked);
     void calibrateRuler();
+    void autoCalibrateRuler();
     void onShowProfileToggled(bool checked);
 
     // Color Picker
@@ -343,6 +344,9 @@ private:
     QLabel *m_lblRulerCalib = nullptr;
     QLabel *m_lblRulerMeas = nullptr;
     QPushButton *m_btnRulerCalibrate = nullptr;
+    QPushButton *m_btnAutoRuler = nullptr;
+    QLabel *m_lblAutorulerResult = nullptr;
+    QLabel *m_lblAutorulerPreview = nullptr;
     QCheckBox *m_chkShowProfile = nullptr;
     IntensityChart *m_intensityChart = nullptr;
     HistogramWidget *m_histogramWidget = nullptr;

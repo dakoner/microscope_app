@@ -337,11 +337,38 @@
                <item row="3" column="1">
                 <widget class="QLabel" name="m_lblRulerMeas"><property name="text"><string>0.00 mm</string></property></widget>
                </item>
-              </layout>
+             </layout>
              </item>
              <item>
               <widget class="QPushButton" name="m_btnRulerCalibrate">
                <property name="text"><string>Calibrate</string></property>
+              </widget>
+             </item>
+             <item>
+             <widget class="QPushButton" name="m_btnAutoRuler">
+               <property name="toolTip"><string>Detect a standard 1 mm ruler with 100 minor divisions in the current camera frame.</string></property>
+               <property name="text"><string>Autoruler</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QGroupBox" name="autorulerResultsGroup">
+               <property name="title"><string>Autoruler Results</string></property>
+               <layout class="QVBoxLayout" name="autorulerResultsLayout">
+                <item>
+                 <widget class="QLabel" name="m_lblAutorulerResult">
+                  <property name="text"><string>Run Autoruler to see the detected rotation and tick spacing.</string></property>
+                  <property name="wordWrap"><bool>true</bool></property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="m_lblAutorulerPreview">
+                  <property name="minimumSize"><size><width>0</width><height>160</height></size></property>
+                  <property name="styleSheet"><string notr="true">background-color: #202020; border: 1px solid #606060;</string></property>
+                  <property name="text"><string>Annotated ruler preview</string></property>
+                  <property name="alignment"><set>Qt::AlignCenter</set></property>
+                 </widget>
+                </item>
+               </layout>
               </widget>
              </item>
              <item>
