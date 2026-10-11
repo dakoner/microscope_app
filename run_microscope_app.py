@@ -26,7 +26,30 @@ _configure_qt_runtime_from_pyside6()
 from PySide6.QtWidgets import QApplication, QMainWindow
 import shiboken6
 
-import _microscope_app_cpp as native
+
+def _configure_native_module_path() -> None:
+    """Expose the qmake build output to the Python launcher.
+
+    qmake writes the pybind extension to ``release/``.  ``uv run`` executes
+    this source file from the project directory, so Python would otherwise not
+    search that sibling build directory.
+    """
+    release_dir = Path(__file__).resolve().parent / "release"
+    if release_dir.is_dir():
+        sys.path.insert(0, str(release_dir))
+
+
+_configure_native_module_path()
+
+try:
+    import _microscope_app_cpp as native
+except ModuleNotFoundError as exc:
+    raise ModuleNotFoundError(
+        "The native microscope module has not been built. Run `make` first, "
+        "then launch with `uv run run_microscope_app.py`."
+    ) from exc
+
+from microscope_mcp import QtMicroscopeBridge, start_local_mcp_server
 
 
 def main() -> int:
@@ -35,10 +58,14 @@ def main() -> int:
     window_ptr = native.create_main_window_ptr()
     main_window = shiboken6.wrapInstance(int(window_ptr), QMainWindow)
     native.show_maximized_ptr(window_ptr)
+    mcp_bridge = QtMicroscopeBridge(native, int(window_ptr))
+    app.aboutToQuit.connect(mcp_bridge.close)
+    start_local_mcp_server(mcp_bridge)
 
     exit_code = app.exec()
 
     # C++ side owns the object lifetime here.
+    mcp_bridge.close()
     native.delete_main_window_ptr(window_ptr)
     return exit_code
 

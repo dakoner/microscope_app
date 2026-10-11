@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <string>
 #include <vector>
 
 namespace Ui { class MainWindow; }
@@ -55,6 +56,20 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
+
+    // Thread-affine entry points used by the local MCP bridge.  These are kept
+    // deliberately small so an AI client can use the same code paths as the UI.
+    std::string mcpStatusJson() const;
+    std::string mcpStartCameraJson();
+    std::string mcpStopCameraJson();
+    std::string mcpSnapshotJson();
+    std::string mcpSetRecordingJson(bool enabled);
+    std::string mcpSetExposureJson(double milliseconds);
+    std::string mcpSetGainJson(int gain);
+    std::string mcpSetAutoExposureJson(bool enabled);
+    std::string mcpSetYoloJson(bool enabled);
+    std::string mcpMoveStageJson(double xMm, double yMm, int feedrate);
+    std::string mcpEmergencyStopStageJson();
 
 protected:
     void closeEvent(QCloseEvent *event) override;

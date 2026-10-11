@@ -100,6 +100,15 @@ static QString resolveOutputBaseDir()
     return QDir(cwd).absoluteFilePath("videos");
 }
 
+static std::string mcpJsonResult(bool ok, const QString &message,
+                                 const QJsonObject &extra = {})
+{
+    QJsonObject result = extra;
+    result["ok"] = ok;
+    result["message"] = message;
+    return QJsonDocument(result).toJson(QJsonDocument::Compact).toStdString();
+}
+
 static void appendPlainTextBlock(QPlainTextEdit *widget, const QString &text)
 {
     if (!widget) {
@@ -1563,6 +1572,131 @@ void MainWindow::onHomeAndRunClicked()
     m_cncControlPanel->sendCommand(QString("G1 X100 Y0 F%1").arg(feedrate));
     m_cncControlPanel->sendCommand("G4 P0");
     log("Executing Home and Run.");
+}
+
+// ---------- MCP bridge ----------
+
+std::string MainWindow::mcpStatusJson() const
+{
+    QJsonObject result;
+    result["camera_running"] = m_isCameraRunning;
+    result["recording"] = m_videoThread && m_videoThread->isRunning();
+    result["recording_requested"] = m_recordingRequested;
+    result["scanning"] = m_isScanning;
+    result["yolo_inference"] = m_yoloInferenceActive;
+    result["frames_received"] = static_cast<qint64>(m_framesReceivedCount);
+    result["frames_written_to_mosaic"] = static_cast<qint64>(m_framesWrittenToMosaicCount);
+    result["fps"] = m_currentFps;
+    result["cnc_state"] = m_cncState;
+    result["stage_position_mm"] = QJsonObject{
+        {"x", m_currentCncXMm}, {"y", m_currentCncYMm}
+    };
+    return mcpJsonResult(true, "Microscope status retrieved.", result);
+}
+
+std::string MainWindow::mcpStartCameraJson()
+{
+    if (!m_isCameraRunning)
+        onStartClicked();
+    return mcpJsonResult(m_isCameraRunning,
+                         m_isCameraRunning ? "Camera is running." : "Camera could not be started.");
+}
+
+std::string MainWindow::mcpStopCameraJson()
+{
+    if (m_isCameraRunning)
+        onStopClicked();
+    return mcpJsonResult(true, "Camera is stopped.");
+}
+
+std::string MainWindow::mcpSnapshotJson()
+{
+    if (m_currentImage.isNull())
+        return mcpJsonResult(false, "No camera frame is available. Start the camera and wait for a frame.");
+
+    QDir snapDir("snapshots");
+    snapDir.mkpath(".");
+    const QString filename = snapDir.filePath(
+        QString("snapshot_%1.png").arg(QDateTime::currentMSecsSinceEpoch()));
+    if (!m_currentImage.save(filename))
+        return mcpJsonResult(false, "Could not save the snapshot.");
+    log(QString("MCP snapshot saved: %1").arg(QFileInfo(filename).fileName()));
+    return mcpJsonResult(true, "Snapshot saved.", QJsonObject{{"path", QFileInfo(filename).absoluteFilePath()}});
+}
+
+std::string MainWindow::mcpSetRecordingJson(bool enabled)
+{
+    if (!m_isCameraRunning)
+        return mcpJsonResult(false, "Start the camera before changing recording.");
+
+    const bool active = m_videoThread && m_videoThread->isRunning();
+    if (enabled && !active && !m_recordingRequested) {
+        onRecordClicked();
+    } else if (!enabled && (active || m_recordingRequested)) {
+        if (active)
+            onRecordClicked();
+        else
+            m_recordingRequested = false;
+    }
+    return mcpJsonResult(true, enabled ? "Recording requested." : "Recording stopped.");
+}
+
+std::string MainWindow::mcpSetExposureJson(double milliseconds)
+{
+    if (milliseconds < kMinimumExposureMs || milliseconds > 10000.0)
+        return mcpJsonResult(false, "Exposure must be between 0.001 and 10000 milliseconds.");
+    m_spinExposureTime->setValue(milliseconds);
+    return mcpJsonResult(true, "Exposure updated.", QJsonObject{{"exposure_ms", milliseconds}});
+}
+
+std::string MainWindow::mcpSetGainJson(int gain)
+{
+    if (gain < m_spinGain->minimum() || gain > m_spinGain->maximum())
+        return mcpJsonResult(false, QString("Gain must be between %1 and %2.")
+                                     .arg(m_spinGain->minimum()).arg(m_spinGain->maximum()));
+    m_spinGain->setValue(gain);
+    return mcpJsonResult(true, "Gain updated.", QJsonObject{{"gain", gain}});
+}
+
+std::string MainWindow::mcpSetAutoExposureJson(bool enabled)
+{
+    m_chkAutoExposure->setChecked(enabled);
+    return mcpJsonResult(true, enabled ? "Auto exposure enabled." : "Auto exposure disabled.");
+}
+
+std::string MainWindow::mcpSetYoloJson(bool enabled)
+{
+    if (m_actionYoloInference)
+        m_actionYoloInference->setChecked(enabled);
+    else
+        onYoloToggled(enabled);
+    return mcpJsonResult(m_yoloInferenceActive == enabled,
+                         enabled ? "YOLO inference enabled." : "YOLO inference disabled.");
+}
+
+std::string MainWindow::mcpMoveStageJson(double xMm, double yMm, int feedrate)
+{
+    if (!m_cncControlPanel)
+        return mcpJsonResult(false, "The CNC stage controller is unavailable.");
+    if (!std::isfinite(xMm) || !std::isfinite(yMm) || feedrate < 1 || feedrate > 5000)
+        return mcpJsonResult(false, "Stage coordinates must be finite and feedrate must be 1 to 5000 mm/min.");
+    m_cncControlPanel->sendCommand("G90");
+    m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2 F%3")
+                                       .arg(xMm, 0, 'f', 3).arg(yMm, 0, 'f', 3).arg(feedrate));
+    log(QString("MCP stage move requested: X%1 Y%2 F%3").arg(xMm).arg(yMm).arg(feedrate));
+    return mcpJsonResult(true, "Stage move queued.",
+                         QJsonObject{{"target_mm", QJsonObject{{"x", xMm}, {"y", yMm}}},
+                                     {"feedrate_mm_min", feedrate}});
+}
+
+std::string MainWindow::mcpEmergencyStopStageJson()
+{
+    if (!m_cncControlPanel)
+        return mcpJsonResult(false, "The CNC stage controller is unavailable.");
+    m_cncControlPanel->sendCommand("!");
+    m_cncControlPanel->stop();
+    log("MCP emergency stop requested.");
+    return mcpJsonResult(true, "Stage stop requested.");
 }
 
 // ---------- Frame pipeline ----------
