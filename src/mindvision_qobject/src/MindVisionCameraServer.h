@@ -1,8 +1,10 @@
 #ifndef MINDVISIONCAMERASERVER_H
 #define MINDVISIONCAMERASERVER_H
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QtGlobal>
 
 #include "mindvision_qobject_global.h"
@@ -27,7 +29,7 @@ public:
     Q_INVOKABLE quint16 serverPort() const;
     Q_INVOKABLE int connectedClientCount() const;
 
-    // Optional synthetic camera mode for testing without hardware
+    // Optional synthetic camera/stage mode for testing without hardware
     Q_INVOKABLE void setSyntheticMode(bool enabled);
     Q_INVOKABLE bool isSyntheticMode() const;
 
@@ -49,11 +51,23 @@ public:
     Q_INVOKABLE bool startCapture();
     Q_INVOKABLE void stopCapture();
 
+    // Stage (Grbl / FluidNC CNC serial) control on the server
+    Q_INVOKABLE QStringList availableStagePorts() const;
+    Q_INVOKABLE bool connectStage(const QString &portName, int baudRate = 115200);
+    Q_INVOKABLE void disconnectStage();
+    Q_INVOKABLE bool isStageConnected() const;
+    Q_INVOKABLE QString stagePortName() const;
+    Q_INVOKABLE int stageBaudRate() const;
+    Q_INVOKABLE bool sendStageCommand(const QString &cmd);
+    Q_INVOKABLE bool sendStageRawCommand(const QByteArray &rawCmd);
+
     MindVisionCamera *camera() const;
 
 signals:
     void clientConnected(QString peerAddress);
     void clientDisconnected(QString peerAddress);
+    void stageStatusChanged(bool connected, QString portName);
+    void stageLogMessage(QString message);
     void logMessage(QString message);
     void errorOccurred(QString message);
 

@@ -10,10 +10,14 @@
 #include <QFileInfo>
 #include <QHostAddress>
 #include <QImage>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
 #include <QMutex>
+#include <QRegularExpression>
+#include <QSerialPort>
+#include <QSerialPortInfo>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QThread>
@@ -126,6 +130,7 @@ struct ClientSession {
     QTcpSocket *socket = nullptr;
     QByteArray readBuffer;
     bool streaming = false;
+    bool stageSubscribed = false;
     int jpegQuality = 85;
     QString peerName;
 };
@@ -169,6 +174,11 @@ public:
         connect(m_camera, &MindVisionCamera::errorOccurred,
                 this, &MindVisionCameraServerPrivate::onCameraError);
 
+        connect(&m_stageSerial, &QSerialPort::readyRead,
+                this, &MindVisionCameraServerPrivate::onStageReadyRead);
+        connect(&m_stageSerial, &QSerialPort::errorOccurred,
+                this, &MindVisionCameraServerPrivate::onStageSerialError);
+
         connect(m_telemetryTimer, &QTimer::timeout,
                 this, &MindVisionCameraServerPrivate::updateCachedTelemetry);
         m_telemetryTimer->start(200);
@@ -177,6 +187,7 @@ public:
     ~MindVisionCameraServerPrivate() override
     {
         stopServer();
+        disconnectStage();
         if (m_videoThread->isRunning()) {
             m_videoThread->stopRecording();
             m_videoThread->wait();
@@ -204,6 +215,42 @@ public:
             delete session;
         }
         m_clients.clear();
+    }
+
+    QStringList availableStagePorts() const
+    {
+        QStringList list;
+        const auto infos = QSerialPortInfo::availablePorts();
+        for (const QSerialPortInfo &info : infos) {
+            if (!info.portName().isEmpty() && !list.contains(info.portName())) {
+                list.append(info.portName());
+            }
+        }
+        if (m_camera->isSyntheticMode() || m_stageSyntheticConnected) {
+            if (!list.contains(QStringLiteral("SYNTHETIC_STAGE"))) {
+                list.prepend(QStringLiteral("SYNTHETIC_STAGE"));
+            }
+        }
+        return list;
+    }
+
+    bool isStageConnected() const
+    {
+        return m_stageSerial.isOpen() || m_stageSyntheticConnected;
+    }
+
+    QJsonObject buildStageStateJson() const
+    {
+        QJsonObject st;
+        st["connected"] = isStageConnected();
+        st["port_name"] = m_stagePortName;
+        st["baud_rate"] = m_stageBaudRate;
+        QJsonArray portsArr;
+        for (const QString &p : availableStagePorts()) {
+            portsArr.append(p);
+        }
+        st["ports"] = portsArr;
+        return st;
     }
 
     QJsonObject buildCameraStateJson() const
@@ -237,6 +284,7 @@ public:
             obj["width"] = m_lastFrameWidth;
             obj["height"] = m_lastFrameHeight;
         }
+        obj["stage"] = buildStageStateJson();
         return obj;
     }
 
@@ -254,7 +302,317 @@ public:
         }
     }
 
+    void broadcastStageEvent(const QJsonObject &eventObj)
+    {
+        if (m_clients.isEmpty()) {
+            return;
+        }
+        const QByteArray packet = CameraNet::packJsonPacket(eventObj);
+        for (ClientSession *session : std::as_const(m_clients)) {
+            if (session->stageSubscribed &&
+                session->socket &&
+                session->socket->state() == QAbstractSocket::ConnectedState) {
+                session->socket->write(packet);
+                session->socket->flush();
+            }
+        }
+    }
+
+    void emitAndBroadcastStageLog(const QString &msg)
+    {
+        emit q->stageLogMessage(msg);
+        QJsonObject ev;
+        ev["event"] = "stage_log";
+        ev["message"] = msg;
+        broadcastStageEvent(ev);
+    }
+
+    void emitAndBroadcastStageStatus()
+    {
+        const bool connected = isStageConnected();
+        emit q->stageStatusChanged(connected, m_stagePortName);
+        QJsonObject ev;
+        ev["event"] = "stage_status";
+        ev["connected"] = connected;
+        ev["port_name"] = m_stagePortName;
+        ev["baud_rate"] = m_stageBaudRate;
+        broadcastStageEvent(ev);
+    }
+
+    bool connectStage(const QString &requestedPort, int baudRate, QString *errorOut = nullptr)
+    {
+        QString portName = requestedPort.trimmed();
+        if (portName.isEmpty() && isStageConnected()) {
+            // Attach to already-connected stage port
+            emitAndBroadcastStageStatus();
+            return true;
+        }
+        if (portName.isEmpty()) {
+            const QStringList ports = availableStagePorts();
+            if (!ports.isEmpty()) {
+                portName = ports.first();
+            }
+        }
+        if (portName.isEmpty()) {
+            const QString err = QStringLiteral("No stage serial port specified or available on server.");
+            if (errorOut) *errorOut = err;
+            emitAndBroadcastStageLog(QStringLiteral("Failed to connect stage: ") + err);
+            return false;
+        }
+
+        // If already connected to the exact same port & baud rate, avoid reopening/resetting DTR
+        if (isStageConnected() && m_stagePortName == portName && m_stageBaudRate == baudRate) {
+            emitAndBroadcastStageLog(
+                QString("Connected to %1 at %2 baud.").arg(portName).arg(baudRate));
+            emitAndBroadcastStageStatus();
+            return true;
+        }
+
+        disconnectStage();
+
+        if (portName.compare(QStringLiteral("SYNTHETIC_STAGE"), Qt::CaseInsensitive) == 0) {
+            m_stageSyntheticConnected = true;
+            m_stagePortName = QStringLiteral("SYNTHETIC_STAGE");
+            m_stageBaudRate = baudRate > 0 ? baudRate : 115200;
+            m_synStageRelative = false;
+            m_synStageState = QStringLiteral("Idle");
+            emit q->logMessage(QString("Stage connected to SYNTHETIC_STAGE (%1 baud)").arg(m_stageBaudRate));
+            emitAndBroadcastStageLog(
+                QString("Connected to %1 at %2 baud.").arg(m_stagePortName).arg(m_stageBaudRate));
+            emitAndBroadcastStageStatus();
+            emitAndBroadcastStageLog(QStringLiteral("Rx: Grbl 4.0 [FluidNC synthetic]"));
+            emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            return true;
+        }
+
+        m_stageSerial.setPortName(portName);
+        m_stageSerial.setBaudRate(baudRate > 0 ? baudRate : 115200);
+        m_stageSerial.setDataBits(QSerialPort::Data8);
+        m_stageSerial.setParity(QSerialPort::NoParity);
+        m_stageSerial.setStopBits(QSerialPort::OneStop);
+        m_stageSerial.setFlowControl(QSerialPort::NoFlowControl);
+
+        if (!m_stageSerial.open(QIODevice::ReadWrite)) {
+            const QString err = QString("Failed to connect to %1: %2")
+                                    .arg(portName, m_stageSerial.errorString());
+            if (errorOut) *errorOut = err;
+            emit q->errorOccurred(err);
+            emitAndBroadcastStageLog(err);
+            emitAndBroadcastStageStatus();
+            return false;
+        }
+
+        m_stagePortName = portName;
+        m_stageBaudRate = baudRate > 0 ? baudRate : 115200;
+        m_stageReadBuffer.clear();
+        emit q->logMessage(QString("Stage serial connected: %1 @ %2 baud")
+                               .arg(m_stagePortName)
+                               .arg(m_stageBaudRate));
+        emitAndBroadcastStageLog(
+            QString("Connected to %1 at %2 baud.").arg(m_stagePortName).arg(m_stageBaudRate));
+        emitAndBroadcastStageStatus();
+        return true;
+    }
+
+    void disconnectStage()
+    {
+        const bool wasConnected = isStageConnected();
+        if (m_stageSerial.isOpen()) {
+            m_stageSerial.close();
+        }
+        m_stageSyntheticConnected = false;
+        m_stageReadBuffer.clear();
+        if (wasConnected) {
+            emit q->logMessage(QString("Stage serial disconnected (%1).").arg(m_stagePortName));
+            emitAndBroadcastStageLog(QStringLiteral("Disconnected from serial port."));
+            emitAndBroadcastStageStatus();
+        }
+    }
+
+    QString formatSyntheticStageStatus() const
+    {
+        return QString("Rx: <%1|WPos:%2,%3,%4>")
+            .arg(m_synStageState)
+            .arg(m_synStageX, 0, 'f', 3)
+            .arg(m_synStageY, 0, 'f', 3)
+            .arg(m_synStageZ, 0, 'f', 3);
+    }
+
+    void handleSyntheticStageCommand(const QString &rawCmd)
+    {
+        const QString cmd = rawCmd.trimmed();
+        if (cmd.isEmpty()) {
+            emitAndBroadcastStageLog(QStringLiteral("Rx: ok"));
+            return;
+        }
+        if (cmd.startsWith(QStringLiteral("__SCAN_"))) {
+            emitAndBroadcastStageLog(QStringLiteral("Rx: ok"));
+            return;
+        }
+        const QString upper = cmd.toUpper();
+        if (upper == QStringLiteral("$H")) {
+            m_synStageX = 0.0;
+            m_synStageY = 0.0;
+            m_synStageZ = 0.0;
+            m_synStageState = QStringLiteral("Idle");
+            emitAndBroadcastStageLog(QStringLiteral("Rx: ok"));
+            emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            return;
+        }
+        if (upper == QStringLiteral("$HX")) {
+            m_synStageX = 0.0;
+            m_synStageState = QStringLiteral("Idle");
+            emitAndBroadcastStageLog(QStringLiteral("Rx: ok"));
+            emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            return;
+        }
+        if (upper == QStringLiteral("$HY")) {
+            m_synStageY = 0.0;
+            m_synStageState = QStringLiteral("Idle");
+            emitAndBroadcastStageLog(QStringLiteral("Rx: ok"));
+            emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            return;
+        }
+        if (upper == QStringLiteral("!")) {
+            m_synStageState = QStringLiteral("Hold:0");
+            emitAndBroadcastStageLog(QStringLiteral("Rx: ok"));
+            emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            return;
+        }
+        if (upper == QStringLiteral("~")) {
+            m_synStageState = QStringLiteral("Idle");
+            emitAndBroadcastStageLog(QStringLiteral("Rx: ok"));
+            emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            return;
+        }
+
+        bool localRelative = m_synStageRelative;
+        if (upper.contains(QStringLiteral("G90"))) {
+            localRelative = false;
+            if (!upper.startsWith(QStringLiteral("$J="))) {
+                m_synStageRelative = false;
+            }
+        }
+        if (upper.contains(QStringLiteral("G91"))) {
+            localRelative = true;
+            if (!upper.startsWith(QStringLiteral("$J="))) {
+                m_synStageRelative = true;
+            }
+        }
+
+        static const QRegularExpression axisRe(QStringLiteral("([XYZ])\\s*(-?\\d+(?:\\.\\d+)?)"));
+        auto it = axisRe.globalMatch(upper);
+        while (it.hasNext()) {
+            const auto match = it.next();
+            const QString axis = match.captured(1);
+            const double val = match.captured(2).toDouble();
+            if (axis == QStringLiteral("X")) {
+                m_synStageX = localRelative ? (m_synStageX + val) : val;
+            } else if (axis == QStringLiteral("Y")) {
+                m_synStageY = localRelative ? (m_synStageY + val) : val;
+            } else if (axis == QStringLiteral("Z")) {
+                m_synStageZ = localRelative ? (m_synStageZ + val) : val;
+            }
+        }
+        m_synStageState = QStringLiteral("Idle");
+        emitAndBroadcastStageLog(QStringLiteral("Rx: ok"));
+        emitAndBroadcastStageLog(formatSyntheticStageStatus());
+    }
+
+    bool sendStageCommand(const QString &cmd, QString *errorOut = nullptr)
+    {
+        if (!isStageConnected()) {
+            const QString err = QStringLiteral("Error: Serial port not open.");
+            if (errorOut) *errorOut = err;
+            emitAndBroadcastStageLog(err);
+            return false;
+        }
+
+        if (m_stageSyntheticConnected) {
+            handleSyntheticStageCommand(cmd);
+            return true;
+        }
+
+        const QByteArray fullCmd = (cmd + QStringLiteral("\n")).toLatin1();
+        const qint64 written = m_stageSerial.write(fullCmd);
+        if (written != fullCmd.size()) {
+            const QString err = written < 0
+                ? m_stageSerial.errorString()
+                : QString("short write (%1/%2 bytes)").arg(written).arg(fullCmd.size());
+            const QString fullErr = QString("Error sending command '%1': %2").arg(cmd, err);
+            if (errorOut) *errorOut = fullErr;
+            emitAndBroadcastStageLog(fullErr);
+            return false;
+        }
+        m_stageSerial.flush();
+        return true;
+    }
+
+    bool sendStageRawCommand(const QByteArray &rawCmd, QString *errorOut = nullptr)
+    {
+        if (!isStageConnected()) {
+            if (errorOut) *errorOut = QStringLiteral("Serial port not open.");
+            return false;
+        }
+
+        if (m_stageSyntheticConnected) {
+            if (rawCmd.contains('?')) {
+                emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            }
+            if (rawCmd.contains('\x18')) {
+                m_synStageState = QStringLiteral("Idle");
+                emitAndBroadcastStageLog(QStringLiteral("Rx: Grbl 4.0 [FluidNC synthetic]"));
+                emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            }
+            if (rawCmd.contains('!')) {
+                m_synStageState = QStringLiteral("Hold:0");
+                emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            }
+            if (rawCmd.contains('~')) {
+                m_synStageState = QStringLiteral("Idle");
+                emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            }
+            return true;
+        }
+
+        const qint64 written = m_stageSerial.write(rawCmd);
+        if (written != rawCmd.size()) {
+            if (errorOut) *errorOut = m_stageSerial.errorString();
+            return false;
+        }
+        m_stageSerial.flush();
+        return true;
+    }
+
 public slots:
+    void onStageReadyRead()
+    {
+        m_stageReadBuffer.append(m_stageSerial.readAll());
+        while (true) {
+            const int nlIdx = m_stageReadBuffer.indexOf('\n');
+            if (nlIdx < 0) {
+                break;
+            }
+            const QByteArray line = m_stageReadBuffer.left(nlIdx + 1);
+            m_stageReadBuffer.remove(0, nlIdx + 1);
+            const QString s = QString::fromLatin1(line).trimmed();
+            if (!s.isEmpty()) {
+                emitAndBroadcastStageLog(QStringLiteral("Rx: ") + s);
+            }
+        }
+    }
+
+    void onStageSerialError(QSerialPort::SerialPortError error)
+    {
+        if (error == QSerialPort::ResourceError) {
+            const QString err = QString("Serial port resource error: %1")
+                                    .arg(m_stageSerial.errorString());
+            emit q->errorOccurred(err);
+            emitAndBroadcastStageLog(err);
+            disconnectStage();
+        }
+    }
+
     void updateCachedTelemetry()
     {
         if (!m_camera->isOpen()) {
@@ -505,6 +863,39 @@ public slots:
             }
             extraResult["filename"] = m_lastRecordingFile;
             ok = true;
+        } else if (cmd == "stage_subscribe") {
+            session->stageSubscribed = params.value("enabled").toBool(true);
+            extraResult["stage"] = buildStageStateJson();
+            ok = true;
+        } else if (cmd == "stage_list_ports") {
+            extraResult["stage"] = buildStageStateJson();
+            ok = true;
+        } else if (cmd == "stage_connect") {
+            session->stageSubscribed = true;
+            const QString portName = params.value("port_name").toString().trimmed();
+            const int baudRate = params.value("baud_rate").toInt(115200);
+            ok = connectStage(portName, baudRate, &errorMsg);
+            extraResult["stage"] = buildStageStateJson();
+        } else if (cmd == "stage_disconnect") {
+            session->stageSubscribed = true;
+            disconnectStage();
+            extraResult["stage"] = buildStageStateJson();
+            ok = true;
+        } else if (cmd == "stage_send_command") {
+            session->stageSubscribed = true;
+            const QString stageCmd = params.value("command").toString();
+            ok = sendStageCommand(stageCmd, &errorMsg);
+            extraResult["stage"] = buildStageStateJson();
+        } else if (cmd == "stage_send_raw") {
+            session->stageSubscribed = true;
+            QByteArray rawBytes;
+            if (params.contains("data_hex")) {
+                rawBytes = QByteArray::fromHex(params.value("data_hex").toString().toLatin1());
+            } else {
+                rawBytes = params.value("command").toString().toLatin1();
+            }
+            ok = sendStageRawCommand(rawBytes, &errorMsg);
+            extraResult["stage"] = buildStageStateJson();
         } else {
             ok = false;
             errorMsg = QString("Unknown command: %1").arg(cmd);
@@ -636,6 +1027,18 @@ public:
     double m_cachedExposureMs = 15.0;
     int m_cachedAnalogGain = 1;
     int m_cachedAeTarget = 120;
+
+    // Stage serial controller state
+    QSerialPort m_stageSerial;
+    QByteArray m_stageReadBuffer;
+    QString m_stagePortName;
+    int m_stageBaudRate = 115200;
+    bool m_stageSyntheticConnected = false;
+    bool m_synStageRelative = false;
+    double m_synStageX = 0.0;
+    double m_synStageY = 0.0;
+    double m_synStageZ = 0.0;
+    QString m_synStageState = QStringLiteral("Idle");
 };
 
 // =============================================================================
@@ -781,6 +1184,46 @@ bool MindVisionCameraServer::startCapture()
 void MindVisionCameraServer::stopCapture()
 {
     d->m_camera->stop();
+}
+
+QStringList MindVisionCameraServer::availableStagePorts() const
+{
+    return d->availableStagePorts();
+}
+
+bool MindVisionCameraServer::connectStage(const QString &portName, int baudRate)
+{
+    return d->connectStage(portName, baudRate);
+}
+
+void MindVisionCameraServer::disconnectStage()
+{
+    d->disconnectStage();
+}
+
+bool MindVisionCameraServer::isStageConnected() const
+{
+    return d->isStageConnected();
+}
+
+QString MindVisionCameraServer::stagePortName() const
+{
+    return d->m_stagePortName;
+}
+
+int MindVisionCameraServer::stageBaudRate() const
+{
+    return d->m_stageBaudRate;
+}
+
+bool MindVisionCameraServer::sendStageCommand(const QString &cmd)
+{
+    return d->sendStageCommand(cmd);
+}
+
+bool MindVisionCameraServer::sendStageRawCommand(const QByteArray &rawCmd)
+{
+    return d->sendStageRawCommand(rawCmd);
 }
 
 MindVisionCamera *MindVisionCameraServer::camera() const

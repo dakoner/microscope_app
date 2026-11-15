@@ -57,16 +57,19 @@ def _apply_cli_camera_options(argv: list[str]) -> list[str]:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         "--remote-camera",
+        "--remote",
+        "--remote-stage",
+        dest="remote_camera",
         metavar="HOST[:PORT]",
-        help="Connect to a remote headless camera server (e.g. 192.168.1.50:8766).",
+        help="Connect camera and stage to a remote camera_server (e.g. 192.168.1.50:8766).",
     )
     parser.add_argument(
         "--camera-mode",
         choices=("local", "remote"),
-        help="Select local MindVision SDK or remote TCP camera server.",
+        help="Select local hardware or remote TCP camera_server.",
     )
-    parser.add_argument("--camera-host", help="Remote camera server hostname or IP.")
-    parser.add_argument("--camera-port", type=int, help="Remote camera server TCP port.")
+    parser.add_argument("--camera-host", help="Remote camera_server hostname or IP.")
+    parser.add_argument("--camera-port", type=int, help="Remote camera_server TCP port.")
     parser.add_argument(
         "--camera-jpeg-quality",
         type=int,
@@ -81,6 +84,15 @@ def _apply_cli_camera_options(argv: list[str]) -> list[str]:
         "--synthetic-camera",
         action="store_true",
         help="Use synthetic test-pattern camera when in local mode.",
+    )
+    parser.add_argument(
+        "--stage-port",
+        help="Serial port name to connect the CNC stage controller to (e.g. ttyUSB0 or SYNTHETIC_STAGE).",
+    )
+    parser.add_argument(
+        "--auto-connect-stage",
+        action="store_true",
+        help="Automatically connect to the CNC stage serial port on startup.",
     )
     known, remaining = parser.parse_known_args(argv[1:])
 
@@ -106,6 +118,10 @@ def _apply_cli_camera_options(argv: list[str]) -> list[str]:
         os.environ["MICROSCOPE_CAMERA_REMOTE_RECORD"] = "1"
     if known.synthetic_camera:
         os.environ["MICROSCOPE_CAMERA_SYNTHETIC"] = "1"
+    if known.stage_port:
+        os.environ["MICROSCOPE_STAGE_PORT"] = known.stage_port
+    if known.auto_connect_stage:
+        os.environ["MICROSCOPE_STAGE_AUTO_CONNECT"] = "1"
 
     return [argv[0], *remaining]
 

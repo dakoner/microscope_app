@@ -1,4 +1,4 @@
-QT += core gui network
+QT += core gui network serialport
 
 TARGET = camera_server
 TEMPLATE = app

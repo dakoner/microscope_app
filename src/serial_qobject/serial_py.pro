@@ -1,7 +1,8 @@
 TEMPLATE = lib
 CONFIG += plugin c++17
 CONFIG += no_plugin_name_prefix
-QT += core serialport
+QT += core serialport network
+INCLUDEPATH += ../mindvision_qobject/src
 
 TARGET = _serial_qobject_py
 DESTDIR = release

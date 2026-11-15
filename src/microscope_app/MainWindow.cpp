@@ -863,12 +863,12 @@ void MainWindow::createCameraConnectionPanel()
         return;
     }
 
-    m_cameraConnectionGroup = new QGroupBox("Camera Source", ui->exposureGainPage);
+    m_cameraConnectionGroup = new QGroupBox("Hardware Source (Camera & Stage)", ui->exposureGainPage);
     auto *form = new QFormLayout(m_cameraConnectionGroup);
 
     m_comboCameraMode = new QComboBox(m_cameraConnectionGroup);
-    m_comboCameraMode->addItem("Local (MindVision SDK)", "local");
-    m_comboCameraMode->addItem("Remote (Network TCP)", "remote");
+    m_comboCameraMode->addItem("Local (Direct USB / Serial)", "local");
+    m_comboCameraMode->addItem("Remote (camera_server TCP)", "remote");
     form->addRow("Mode:", m_comboCameraMode);
 
     m_editRemoteHost = new QLineEdit("127.0.0.1", m_cameraConnectionGroup);
@@ -890,7 +890,7 @@ void MainWindow::createCameraConnectionPanel()
     m_chkRemoteRecordOnServer->setChecked(false);
     form->addRow(m_chkRemoteRecordOnServer);
 
-    m_btnConnectCamera = new QPushButton("Apply / Reconnect Camera", m_cameraConnectionGroup);
+    m_btnConnectCamera = new QPushButton("Apply / Reconnect Hardware", m_cameraConnectionGroup);
     form->addRow(m_btnConnectCamera);
 
     m_lblCameraConnectionStatus = new QLabel("Status: Not connected", m_cameraConnectionGroup);
@@ -930,13 +930,31 @@ void MainWindow::syncCameraConnectionFromUi()
     }
     const bool remote = m_comboCameraMode && (m_comboCameraMode->currentIndex() == 1);
     const QString host = m_editRemoteHost ? m_editRemoteHost->text().trimmed() : QStringLiteral("127.0.0.1");
+    const QString effectiveHost = host.isEmpty() ? QStringLiteral("127.0.0.1") : host;
     const quint16 port = static_cast<quint16>(m_spinRemotePort ? m_spinRemotePort->value() : 8766);
     const int quality = m_spinRemoteJpegQuality ? m_spinRemoteJpegQuality->value() : 85;
     m_remoteRecordingTarget = remote && m_chkRemoteRecordOnServer && m_chkRemoteRecordOnServer->isChecked();
 
-    m_camera->setRemoteEndpoint(host.isEmpty() ? QStringLiteral("127.0.0.1") : host, port);
+    m_camera->setRemoteEndpoint(effectiveHost, port);
     m_camera->setRemoteJpegQuality(quality);
     m_camera->setRemoteMode(remote);
+
+    if (m_cncControlPanel) {
+        m_cncControlPanel->setRemoteEndpoint(effectiveHost, port);
+        m_cncControlPanel->setRemoteMode(remote);
+        m_cncControlPanel->refreshSerialPorts();
+
+        const QString envStagePort = qEnvironmentVariable("MICROSCOPE_STAGE_PORT").trimmed();
+        const QString envAutoConnect = qEnvironmentVariable("MICROSCOPE_STAGE_AUTO_CONNECT").trimmed().toLower();
+        if (!m_cncControlPanel->isStageConnected()) {
+            if (!envStagePort.isEmpty()) {
+                m_cncControlPanel->connectStage(envStagePort, 115200);
+            } else if (envAutoConnect == "1" || envAutoConnect == "true" || envAutoConnect == "yes") {
+                m_cncControlPanel->connectStage();
+            }
+        }
+    }
+
     updateCameraConnectionStatusLabel();
 }
 
@@ -1733,6 +1751,11 @@ std::string MainWindow::mcpStatusJson() const
     result["frames_received"] = static_cast<qint64>(m_framesReceivedCount);
     result["frames_written_to_mosaic"] = static_cast<qint64>(m_framesWrittenToMosaicCount);
     result["fps"] = m_currentFps;
+    result["stage_mode"] = (m_cncControlPanel && m_cncControlPanel->isRemoteMode()) ? "remote" : "local";
+    result["stage_connected"] = (m_cncControlPanel && m_cncControlPanel->isStageConnected());
+    if (m_cncControlPanel) {
+        result["stage_port"] = m_cncControlPanel->currentPortName();
+    }
     result["cnc_state"] = m_cncState;
     result["stage_position_mm"] = QJsonObject{
         {"x", m_currentCncXMm}, {"y", m_currentCncYMm}
@@ -1827,6 +1850,9 @@ std::string MainWindow::mcpMoveStageJson(double xMm, double yMm, int feedrate)
         return mcpJsonResult(false, "The CNC stage controller is unavailable.");
     if (!std::isfinite(xMm) || !std::isfinite(yMm) || feedrate < 1 || feedrate > 5000)
         return mcpJsonResult(false, "Stage coordinates must be finite and feedrate must be 1 to 5000 mm/min.");
+    if (!m_cncControlPanel->isStageConnected()) {
+        m_cncControlPanel->connectStage();
+    }
     m_cncControlPanel->sendCommand("G90");
     m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2 F%3")
                                        .arg(xMm, 0, 'f', 3).arg(yMm, 0, 'f', 3).arg(feedrate));
@@ -3025,6 +3051,9 @@ void MainWindow::loadSettings()
         if (settings.contains("led_controller_port"))
             m_ledController->setPort(settings.value("led_controller_port").toString());
 
+        if (settings.contains("cnc_controller_port") && m_cncControlPanel)
+            m_cncControlPanel->setPreferredPort(settings.value("cnc_controller_port").toString());
+
         log("Settings loaded.");
     }
 
@@ -3106,7 +3135,7 @@ void MainWindow::saveSettings()
     settings["ruler_calibration"] = m_rulerCalibration;
     settings["led_controller_port"] = m_ledController->getPort();
     if (m_cncControlPanel)
-        settings["cnc_controller_port"] = QString(); // placeholder
+        settings["cnc_controller_port"] = m_cncControlPanel->currentPortName();
 
     QFile file("camera_settings.json");
     if (file.open(QIODevice::WriteOnly)) {

@@ -25,6 +25,18 @@ public:
     void stop();
     int feedrate() const { return m_xyFeedrate; }
 
+    // Remote stage mode (connects to camera_server)
+    void setRemoteMode(bool remote);
+    bool isRemoteMode() const;
+    void setRemoteEndpoint(const QString &host, quint16 port = 8766);
+    QString remoteHost() const;
+    quint16 remotePort() const;
+    bool isStageConnected() const;
+    QString currentPortName() const;
+    void setPreferredPort(const QString &portName);
+    bool connectStage(const QString &portName = QString(), int baudRate = 115200);
+    void disconnectStage();
+
 signals:
     void logSignal(const QString &msg);
     void stateUpdated(const QString &state);
@@ -35,6 +47,7 @@ signals:
     void scanFinished();
 
 public slots:
+    void refreshSerialPorts();
     void sendCommand(const QString &cmd);
     void moveUp();
     void moveDown();
@@ -44,7 +57,6 @@ public slots:
     void moveBack();
 
 private slots:
-    void refreshSerialPorts();
     void onConnectToggled(bool checked);
     void onLogMessage(const std::string &msg);
     void onSerialStatusChanged(bool connected);
@@ -105,6 +117,7 @@ private:
     QString m_lastSentCommand;
     QList<PendingScanEvent> m_pendingScanEvents;
     QString m_lastState;
+    QString m_preferredPort;
     double m_stepSize = 0.1;
     double m_zStepSize = 0.01;
     int m_xyFeedrate = 500;

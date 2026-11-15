@@ -90,7 +90,18 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "--synthetic",
         action="store_true",
         default=os.environ.get("MICROSCOPE_CAMERA_SYNTHETIC", "0").lower() in {"1", "true", "yes"},
-        help="Use synthetic test-pattern camera when no physical camera is attached.",
+        help="Use synthetic test-pattern camera and synthetic stage when no physical hardware is attached.",
+    )
+    parser.add_argument(
+        "--stage-port",
+        default=os.environ.get("MICROSCOPE_STAGE_PORT", ""),
+        help="Optional serial port for the CNC stage controller to open on startup (e.g. ttyUSB0 or SYNTHETIC_STAGE).",
+    )
+    parser.add_argument(
+        "--stage-baud",
+        type=int,
+        default=int(os.environ.get("MICROSCOPE_STAGE_BAUD", "115200")),
+        help="Baud rate for the CNC stage serial port (default: 115200).",
     )
     return parser.parse_args(argv)
 
@@ -123,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
         args.auto_start,
         args.keep_open or args.auto_start,
         args.synthetic,
+        args.stage_port,
+        args.stage_baud,
     )
     if not server_ptr:
         return 1

@@ -49,7 +49,17 @@ int main(int argc, char *argv[])
         QStringLiteral("Keep the camera open/running even when all clients disconnect."));
     const QCommandLineOption syntheticOption(
         QStringLiteral("synthetic"),
-        QStringLiteral("Use synthetic test-pattern generator instead of physical MindVision hardware."));
+        QStringLiteral("Use synthetic test-pattern camera and synthetic stage when no hardware is attached."));
+    const QCommandLineOption stagePortOption(
+        QStringLiteral("stage-port"),
+        QStringLiteral("Optional serial port for the CNC stage controller to open on startup (e.g. ttyUSB0 or SYNTHETIC_STAGE)."),
+        QStringLiteral("port_name"),
+        QString());
+    const QCommandLineOption stageBaudOption(
+        QStringLiteral("stage-baud"),
+        QStringLiteral("Baud rate for the CNC stage serial port (default: 115200)."),
+        QStringLiteral("baud"),
+        QStringLiteral("115200"));
 
     parser.addOption(hostOption);
     parser.addOption(portOption);
@@ -58,6 +68,8 @@ int main(int argc, char *argv[])
     parser.addOption(autoStartOption);
     parser.addOption(keepOpenOption);
     parser.addOption(syntheticOption);
+    parser.addOption(stagePortOption);
+    parser.addOption(stageBaudOption);
     parser.process(app);
 
     const QString bindAddr = parser.value(hostOption);
@@ -67,6 +79,8 @@ int main(int argc, char *argv[])
     const bool autoStart = parser.isSet(autoStartOption);
     const bool keepOpen = parser.isSet(keepOpenOption) || autoStart;
     const bool synthetic = parser.isSet(syntheticOption);
+    const QString stagePort = parser.value(stagePortOption).trimmed();
+    const int stageBaud = parser.value(stageBaudOption).toInt();
 
     MindVisionCameraServer server;
     server.setSyntheticMode(synthetic);
@@ -82,6 +96,15 @@ int main(int argc, char *argv[])
         const QString ts = QDateTime::currentDateTime().toString("HH:mm:ss");
         std::cerr << "[" << ts.toStdString() << "] ERROR: " << msg.toStdString() << std::endl;
     });
+
+    if (!stagePort.isEmpty()) {
+        if (!server.connectStage(stagePort, stageBaud > 0 ? stageBaud : 115200)) {
+            std::cerr << "Warning: failed to open stage port '" << stagePort.toStdString()
+                      << "' on startup (clients can still connect remotely)." << std::endl;
+        }
+    } else if (synthetic && autoStart) {
+        server.connectStage(QStringLiteral("SYNTHETIC_STAGE"), stageBaud > 0 ? stageBaud : 115200);
+    }
 
     if (autoStart) {
         if (!server.startCapture()) {

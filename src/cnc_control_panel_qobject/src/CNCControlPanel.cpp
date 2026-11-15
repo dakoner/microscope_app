@@ -191,24 +191,167 @@ void CNCControlPanel::setupUi()
     connect(m_commandInput, &QLineEdit::returnPressed, this, &CNCControlPanel::sendConsoleCommand);
 }
 
+void CNCControlPanel::setRemoteMode(bool remote)
+{
+    if (!m_serialWorker) {
+        return;
+    }
+    const bool changed = (m_serialWorker->isRemoteMode() != remote);
+    m_serialWorker->setRemoteMode(remote);
+    if (remote) {
+        setTitle(QString("CNC Control (Remote %1:%2)")
+                     .arg(QString::fromStdString(m_serialWorker->remoteHost()))
+                     .arg(m_serialWorker->remotePort()));
+    } else {
+        setTitle(QStringLiteral("CNC Control"));
+    }
+    if (changed) {
+        refreshSerialPorts();
+    }
+}
+
+bool CNCControlPanel::isRemoteMode() const
+{
+    return m_serialWorker && m_serialWorker->isRemoteMode();
+}
+
+void CNCControlPanel::setRemoteEndpoint(const QString &host, quint16 port)
+{
+    if (!m_serialWorker) {
+        return;
+    }
+    m_serialWorker->setRemoteEndpoint(host.toStdString(), static_cast<int>(port));
+    if (m_serialWorker->isRemoteMode()) {
+        setTitle(QString("CNC Control (Remote %1:%2)")
+                     .arg(QString::fromStdString(m_serialWorker->remoteHost()))
+                     .arg(m_serialWorker->remotePort()));
+    }
+}
+
+QString CNCControlPanel::remoteHost() const
+{
+    return m_serialWorker ? QString::fromStdString(m_serialWorker->remoteHost()) : QStringLiteral("127.0.0.1");
+}
+
+quint16 CNCControlPanel::remotePort() const
+{
+    return m_serialWorker ? static_cast<quint16>(m_serialWorker->remotePort()) : 8766;
+}
+
+bool CNCControlPanel::isStageConnected() const
+{
+    return m_serialWorker && m_serialWorker->is_connected();
+}
+
+QString CNCControlPanel::currentPortName() const
+{
+    if (m_serialWorker && m_serialWorker->is_connected()) {
+        const QString p = QString::fromStdString(m_serialWorker->current_port_name());
+        if (!p.isEmpty()) {
+            return p;
+        }
+    }
+    return m_serialPortCombo ? m_serialPortCombo->currentText() : QString();
+}
+
+void CNCControlPanel::setPreferredPort(const QString &portName)
+{
+    m_preferredPort = portName.trimmed();
+    if (!m_preferredPort.isEmpty() && m_serialPortCombo) {
+        const int idx = m_serialPortCombo->findText(m_preferredPort);
+        if (idx >= 0) {
+            m_serialPortCombo->setCurrentIndex(idx);
+        }
+    }
+}
+
+bool CNCControlPanel::connectStage(const QString &portName, int baudRate)
+{
+    if (!m_serialWorker) {
+        return false;
+    }
+    QString target = portName.trimmed();
+    if (target.isEmpty() && m_serialPortCombo) {
+        target = m_serialPortCombo->currentText().trimmed();
+    }
+    if (target.isEmpty() && !m_preferredPort.isEmpty()) {
+        target = m_preferredPort;
+    }
+    if (target.isEmpty()) {
+        refreshSerialPorts();
+        if (m_serialPortCombo) {
+            target = m_serialPortCombo->currentText().trimmed();
+        }
+    }
+    if (target.isEmpty()) {
+        return false;
+    }
+    if (m_serialPortCombo) {
+        int idx = m_serialPortCombo->findText(target);
+        if (idx < 0) {
+            m_serialPortCombo->addItem(target);
+            idx = m_serialPortCombo->findText(target);
+        }
+        if (idx >= 0) {
+            m_serialPortCombo->setCurrentIndex(idx);
+        }
+    }
+    m_serialWorker->connect_serial(target.toStdString(), baudRate);
+    return m_serialWorker->is_connected();
+}
+
+void CNCControlPanel::disconnectStage()
+{
+    if (m_serialWorker) {
+        m_serialWorker->disconnect_serial();
+    }
+}
+
 void CNCControlPanel::refreshSerialPorts()
 {
+    if (!m_serialPortCombo || !m_serialWorker) {
+        return;
+    }
+    const QString prevSelection = m_serialPortCombo->currentText().trimmed();
     m_serialPortCombo->clear();
-    const auto ports = QSerialPortInfo::availablePorts();
-    for (const auto &port : ports)
-        m_serialPortCombo->addItem(port.portName());
+
+    std::string activePort;
+    bool activeConnected = false;
+    const auto ports = m_serialWorker->available_ports(&activePort, &activeConnected);
+    for (const auto &port : ports) {
+        m_serialPortCombo->addItem(QString::fromStdString(port));
+    }
+
+    QString target = QString::fromStdString(activePort).trimmed();
+    if (target.isEmpty() && !m_preferredPort.isEmpty()) {
+        target = m_preferredPort;
+    }
+    if (target.isEmpty()) {
+        target = prevSelection;
+    }
+    if (!target.isEmpty()) {
+        const int idx = m_serialPortCombo->findText(target);
+        if (idx >= 0) {
+            m_serialPortCombo->setCurrentIndex(idx);
+        }
+    }
 }
 
 void CNCControlPanel::onConnectToggled(bool checked)
 {
     if (checked) {
+        if (m_serialWorker && m_serialWorker->is_connected()) {
+            return;
+        }
         QString port = m_serialPortCombo->currentText();
         if (!port.isEmpty())
             m_serialWorker->connect_serial(port.toStdString(), 115200);
         else
             m_connectButton->setChecked(false);
     } else {
-        m_serialWorker->disconnect_serial();
+        if (m_serialWorker && m_serialWorker->is_connected()) {
+            m_serialWorker->disconnect_serial();
+        }
     }
 }
 

@@ -1136,7 +1136,8 @@ release/.obj/VideoThread.o: src/mindvision_qobject/src/VideoThread.cpp src/mindv
 		src/mindvision_qobject/src/MindVisionCamera.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/VideoThread.o src/mindvision_qobject/src/VideoThread.cpp
 
-release/.obj/SerialWorker.o: src/serial_qobject/src/SerialWorker.cpp src/serial_qobject/src/SerialWorker.h
+release/.obj/SerialWorker.o: src/serial_qobject/src/SerialWorker.cpp src/serial_qobject/src/SerialWorker.h \
+		src/mindvision_qobject/src/CameraNetworkProtocol.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/SerialWorker.o src/serial_qobject/src/SerialWorker.cpp
 
 release/.obj/moc_MainWindow.o: release/.moc/moc_MainWindow.cpp 

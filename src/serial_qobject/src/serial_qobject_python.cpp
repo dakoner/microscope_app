@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
-#include <pybind11/functional.h> 
+#include <pybind11/functional.h>
+#include <pybind11/stl.h>
 
 #include "SerialWorker.h"
 #include <QObject>
@@ -85,6 +86,17 @@ PYBIND11_MODULE(_serial_qobject_py, m) {
 
     py::class_<PySerialWorker>(m, "SerialWorker")
         .def(py::init<>())
+        .def("setRemoteMode", &PySerialWorker::setRemoteMode)
+        .def("isRemoteMode", &PySerialWorker::isRemoteMode)
+        .def("setRemoteEndpoint", &PySerialWorker::setRemoteEndpoint,
+             py::arg("host"), py::arg("port") = 8766)
+        .def("remoteHost", &PySerialWorker::remoteHost)
+        .def("remotePort", &PySerialWorker::remotePort)
+        .def("available_ports", [](PySerialWorker &self) {
+            return self.available_ports();
+        })
+        .def("is_connected", &PySerialWorker::is_connected)
+        .def("current_port_name", &PySerialWorker::current_port_name)
         .def("connect_serial", &PySerialWorker::connect_serial, py::arg("port_name"), py::arg("baud_rate") = 115200)
         .def("disconnect_serial", &PySerialWorker::disconnect_serial)
         .def("send_command", &PySerialWorker::send_command, py::arg("cmd"))

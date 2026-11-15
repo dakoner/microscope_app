@@ -278,6 +278,20 @@ PYBIND11_MODULE(_mindvision_qobject_py, m) {
         .def("closeCamera", &MindVisionCameraServer::closeCamera)
         .def("startCapture", &MindVisionCameraServer::startCapture)
         .def("stopCapture", &MindVisionCameraServer::stopCapture)
+        .def("availableStagePorts", [](const MindVisionCameraServer &self) {
+            std::vector<std::string> res;
+            for (const QString &p : self.availableStagePorts()) {
+                res.push_back(p.toStdString());
+            }
+            return res;
+        })
+        .def("connectStage", &MindVisionCameraServer::connectStage,
+             py::arg("portName"), py::arg("baudRate") = 115200)
+        .def("disconnectStage", &MindVisionCameraServer::disconnectStage)
+        .def("isStageConnected", &MindVisionCameraServer::isStageConnected)
+        .def("stagePortName", &MindVisionCameraServer::stagePortName)
+        .def("stageBaudRate", &MindVisionCameraServer::stageBaudRate)
+        .def("sendStageCommand", &MindVisionCameraServer::sendStageCommand)
         ;
 
     py::class_<PyVideoThread, QObject>(m, "VideoThread")

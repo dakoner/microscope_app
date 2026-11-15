@@ -1,4 +1,4 @@
-QT       += core gui network
+QT       += core gui network serialport
 
 TARGET = _mindvision_qobject_py
 TEMPLATE = lib

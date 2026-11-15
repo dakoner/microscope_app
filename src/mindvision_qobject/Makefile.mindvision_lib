@@ -14,10 +14,10 @@ EQ            = =
 
 CC            = gcc
 CXX           = g++
-DEFINES       = -DQT_DEPRECATED_WARNINGS -DMINDVISION_QOBJECT_LIBRARY -DQT_NO_DEBUG -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB
+DEFINES       = -DQT_DEPRECATED_WARNINGS -DMINDVISION_QOBJECT_LIBRARY -DQT_NO_DEBUG -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_SERIALPORT_LIB -DQT_CORE_LIB
 CFLAGS        = -pipe -O2 -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
 CXXFLAGS      = -pipe -O2 -std=gnu++2a -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
-INCPATH       = -I. -IInclude -Isrc -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -Irelease -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++
+INCPATH       = -I. -IInclude -Isrc -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -Irelease -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++
 QMAKE         = /usr/bin/qmake6
 DEL_FILE      = rm -f
 CHK_DIR_EXISTS= test -d
@@ -39,8 +39,8 @@ COMPRESS      = gzip -9f
 DISTNAME      = mindvision_qobject1.0.0
 DISTDIR = /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/mindvision_qobject1.0.0
 LINK          = g++
-LFLAGS        = -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -Wl,-rpath,/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/../../.venv/lib/python3.11/site-packages/PySide6/Qt/lib -Wl,-O1 -Wl,-rpath-link,/usr/lib/x86_64-linux-gnu -shared -Wl,-soname,libmindvision_qobject.so.1
-LIBS          = $(SUBLIBS) -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6Network.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL   
+LFLAGS        = -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -Wl,-O1 -Wl,-rpath-link,/usr/lib/x86_64-linux-gnu -shared -Wl,-soname,libmindvision_qobject.so.1
+LIBS          = $(SUBLIBS) -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6Network.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL   
 AR            = ar cqs
 RANLIB        = 
 SED           = sed
@@ -562,6 +562,7 @@ Makefile.mindvision_lib: mindvision_lib.pro /usr/lib/x86_64-linux-gnu/qt6/mkspec
 		mindvision_lib.pro \
 		/usr/lib/x86_64-linux-gnu/libQt6Gui.prl \
 		/usr/lib/x86_64-linux-gnu/libQt6Network.prl \
+		/usr/lib/x86_64-linux-gnu/libQt6SerialPort.prl \
 		/usr/lib/x86_64-linux-gnu/libQt6Core.prl
 	$(QMAKE) -o Makefile.mindvision_lib mindvision_lib.pro
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf:
@@ -793,6 +794,7 @@ Makefile.mindvision_lib: mindvision_lib.pro /usr/lib/x86_64-linux-gnu/qt6/mkspec
 mindvision_lib.pro:
 /usr/lib/x86_64-linux-gnu/libQt6Gui.prl:
 /usr/lib/x86_64-linux-gnu/libQt6Network.prl:
+/usr/lib/x86_64-linux-gnu/libQt6SerialPort.prl:
 /usr/lib/x86_64-linux-gnu/libQt6Core.prl:
 qmake: FORCE
 	@$(QMAKE) -o Makefile.mindvision_lib mindvision_lib.pro
@@ -849,19 +851,19 @@ release/moc_MindVisionCamera.cpp: src/MindVisionCamera.h \
 		src/mindvision_qobject_global.h \
 		release/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/MindVisionCamera.h -o release/moc_MindVisionCamera.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/MindVisionCamera.h -o release/moc_MindVisionCamera.cpp
 
 release/moc_MindVisionCameraServer.cpp: src/MindVisionCameraServer.h \
 		src/mindvision_qobject_global.h \
 		release/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/MindVisionCameraServer.h -o release/moc_MindVisionCameraServer.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/MindVisionCameraServer.h -o release/moc_MindVisionCameraServer.cpp
 
 release/moc_VideoThread.cpp: src/VideoThread.h \
 		src/mindvision_qobject_global.h \
 		release/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/VideoThread.h -o release/moc_VideoThread.cpp
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/VideoThread.h -o release/moc_VideoThread.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
@@ -878,7 +880,7 @@ release/MindVisionCamera.moc: src/MindVisionCamera.cpp \
 		Include/CameraStatus.h \
 		release/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/MindVisionCamera.cpp -o release/MindVisionCamera.moc
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/MindVisionCamera.cpp -o release/MindVisionCamera.moc
 
 release/MindVisionCameraServer.moc: src/MindVisionCameraServer.cpp \
 		src/MindVisionCameraServer.h \
@@ -888,7 +890,7 @@ release/MindVisionCameraServer.moc: src/MindVisionCameraServer.cpp \
 		src/VideoThread.h \
 		release/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/MindVisionCameraServer.cpp -o release/MindVisionCameraServer.moc
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/MindVisionCameraServer.cpp -o release/MindVisionCameraServer.moc
 
 compiler_yacc_decl_make_all:
 compiler_yacc_decl_clean:

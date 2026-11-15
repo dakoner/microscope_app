@@ -1,4 +1,4 @@
-QT       += core gui network
+QT       += core gui network serialport
 
 TARGET = mindvision_qobject
 TEMPLATE = lib
@@ -35,11 +35,6 @@ HEADERS += \
     src/mindvision_qobject_global.h
 
 LIBS += -L$$PWD/Lib -lMVSDK
-PYSIDE_QT_LIB = $$PWD/../../.venv/lib/python3.11/site-packages/PySide6/Qt/lib
-!exists($$PYSIDE_QT_LIB/libQt6Core.so.6): PYSIDE_QT_LIB = $$PWD/../../.venv/lib/python3.12/site-packages/PySide6/Qt/lib
 unix:!macx {
     QMAKE_LFLAGS += -Wl,--disable-new-dtags -Wl,-rpath,$$PWD/Lib
-    exists($$PYSIDE_QT_LIB/libQt6Core.so.6) {
-        QMAKE_LFLAGS += -Wl,-rpath,$$PYSIDE_QT_LIB
-    }
 }

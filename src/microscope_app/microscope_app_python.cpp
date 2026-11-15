@@ -65,14 +65,16 @@ PYBIND11_MODULE(_microscope_app_cpp, m)
         return reinterpret_cast<MainWindow *>(ptr)->mcpEmergencyStopStageJson();
     });
 
-    // Headless Camera Server bridge
+    // Headless Camera + Stage Server bridge
     m.def("create_camera_server_ptr", [](const std::string &bindAddress,
                                          int port,
                                          int jpegQuality,
                                          const std::string &recordDir,
                                          bool autoStart,
                                          bool keepOpen,
-                                         bool synthetic) {
+                                         bool synthetic,
+                                         const std::string &stagePort,
+                                         int stageBaud) {
         auto *server = new MindVisionCameraServer();
         server->setSyntheticMode(synthetic);
         server->setJpegQuality(jpegQuality);
@@ -88,6 +90,13 @@ PYBIND11_MODULE(_microscope_app_cpp, m)
             std::cerr << "[" << ts.toStdString() << "] ERROR: " << msg.toStdString() << std::endl;
         });
 
+        const QString qStagePort = QString::fromStdString(stagePort).trimmed();
+        if (!qStagePort.isEmpty()) {
+            server->connectStage(qStagePort, stageBaud > 0 ? stageBaud : 115200);
+        } else if (synthetic && autoStart) {
+            server->connectStage(QStringLiteral("SYNTHETIC_STAGE"), stageBaud > 0 ? stageBaud : 115200);
+        }
+
         if (autoStart) {
             server->startCapture();
         }
@@ -96,7 +105,16 @@ PYBIND11_MODULE(_microscope_app_cpp, m)
             return static_cast<std::uintptr_t>(0);
         }
         return reinterpret_cast<std::uintptr_t>(server);
-    });
+    },
+    py::arg("bind_address") = "0.0.0.0",
+    py::arg("port") = 8766,
+    py::arg("jpeg_quality") = 85,
+    py::arg("record_dir") = "videos",
+    py::arg("auto_start") = false,
+    py::arg("keep_open") = false,
+    py::arg("synthetic") = false,
+    py::arg("stage_port") = "",
+    py::arg("stage_baud") = 115200);
 
     m.def("camera_server_port_ptr", [](std::uintptr_t ptr) -> int {
         auto *server = reinterpret_cast<MindVisionCameraServer *>(ptr);
