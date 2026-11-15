@@ -3,6 +3,8 @@ QT += core gui widgets serialport network
 CONFIG += c++20
 CONFIG += link_pkgconfig
 CONFIG -= debug_and_release
+QMAKE_CFLAGS += -fPIC
+QMAKE_CXXFLAGS += -fPIC
 QMAKE_LFLAGS += -Wl,--disable-new-dtags
 PKGCONFIG += libtiff-4
 
