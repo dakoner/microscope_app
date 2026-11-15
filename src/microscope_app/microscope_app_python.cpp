@@ -1,14 +1,18 @@
 #include <pybind11/pybind11.h>
 
 #include "MainWindow.h"
+#include "MindVisionCamera.h"
+#include "MindVisionCameraServer.h"
 
+#include <QDateTime>
 #include <cstdint>
+#include <iostream>
 
 namespace py = pybind11;
 
 PYBIND11_MODULE(_microscope_app_cpp, m)
 {
-    m.doc() = "Pybind11 bridge for C++ microscope MainWindow";
+    m.doc() = "Pybind11 bridge for C++ microscope MainWindow and headless CameraServer";
 
     m.def("create_main_window_ptr", []() {
         auto *window = new MainWindow();
@@ -59,5 +63,51 @@ PYBIND11_MODULE(_microscope_app_cpp, m)
     });
     m.def("mcp_emergency_stop_stage_ptr", [](std::uintptr_t ptr) {
         return reinterpret_cast<MainWindow *>(ptr)->mcpEmergencyStopStageJson();
+    });
+
+    // Headless Camera Server bridge
+    m.def("create_camera_server_ptr", [](const std::string &bindAddress,
+                                         int port,
+                                         int jpegQuality,
+                                         const std::string &recordDir,
+                                         bool autoStart,
+                                         bool keepOpen,
+                                         bool synthetic) {
+        auto *server = new MindVisionCameraServer();
+        server->setSyntheticMode(synthetic);
+        server->setJpegQuality(jpegQuality);
+        server->setRecordingDirectory(QString::fromStdString(recordDir));
+        server->setKeepCameraOpen(keepOpen);
+
+        QObject::connect(server, &MindVisionCameraServer::logMessage, [](const QString &msg) {
+            const QString ts = QDateTime::currentDateTime().toString("HH:mm:ss");
+            std::cout << "[" << ts.toStdString() << "] " << msg.toStdString() << std::endl;
+        });
+        QObject::connect(server, &MindVisionCameraServer::errorOccurred, [](const QString &msg) {
+            const QString ts = QDateTime::currentDateTime().toString("HH:mm:ss");
+            std::cerr << "[" << ts.toStdString() << "] ERROR: " << msg.toStdString() << std::endl;
+        });
+
+        if (autoStart) {
+            server->startCapture();
+        }
+        if (!server->startServer(QString::fromStdString(bindAddress), static_cast<quint16>(port))) {
+            delete server;
+            return static_cast<std::uintptr_t>(0);
+        }
+        return reinterpret_cast<std::uintptr_t>(server);
+    });
+
+    m.def("camera_server_port_ptr", [](std::uintptr_t ptr) -> int {
+        auto *server = reinterpret_cast<MindVisionCameraServer *>(ptr);
+        return server ? static_cast<int>(server->serverPort()) : 0;
+    });
+
+    m.def("delete_camera_server_ptr", [](std::uintptr_t ptr) {
+        auto *server = reinterpret_cast<MindVisionCameraServer *>(ptr);
+        if (server) {
+            server->stopServer();
+            delete server;
+        }
     });
 }

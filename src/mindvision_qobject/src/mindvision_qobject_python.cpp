@@ -1,8 +1,9 @@
 ﻿#include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <pybind11/functional.h> 
+#include <pybind11/functional.h>
 
 #include "MindVisionCamera.h"
+#include "MindVisionCameraServer.h"
 #include "VideoThread.h"
 #include <QObject>
 #include <QImage>
@@ -67,12 +68,11 @@ public:
             QObject::disconnect(m_frameCallbackConnection);
             m_frameCallbackConnection = QMetaObject::Connection();
         }
-        
+
         m_frameCallbackConnection = connect(this, &MindVisionCamera::frameReady, this, [this](QImage img, qint64 timestampMs) {
             if (m_frameCallback) {
                 py::gil_scoped_acquire acquire;
                 try {
-                    // Extract data: width, height, bytesPerLine, format, data
                     py::bytes data((const char*)img.bits(), img.sizeInBytes());
                     m_frameCallback(img.width(), img.height(), img.bytesPerLine(), (int)img.format(), data, timestampMs);
                 } catch (py::error_already_set &e) {
@@ -88,7 +88,7 @@ public:
             QObject::disconnect(m_fpsCallbackConnection);
             m_fpsCallbackConnection = QMetaObject::Connection();
         }
-        
+
         m_fpsCallbackConnection = connect(this, &MindVisionCamera::fpsChanged, this, [this](double fps) {
              py::gil_scoped_acquire acquire;
              if (m_fpsCallback) {
@@ -119,14 +119,14 @@ public:
             }
         });
     }
-    
+
     void registerErrorCallback(py::function callback) {
         m_errorCallback = callback;
         if (m_errorCallbackConnection) {
             QObject::disconnect(m_errorCallbackConnection);
             m_errorCallbackConnection = QMetaObject::Connection();
         }
-        
+
         m_errorCallbackConnection = connect(this, &MindVisionCamera::errorOccurred, this, [this](QString msg) {
              py::gil_scoped_acquire acquire;
              if (m_errorCallback) {
@@ -157,14 +157,14 @@ class PyVideoThread : public VideoThread {
 public:
     using VideoThread::VideoThread;
 
-        void setFrameSource(PyMindVisionCamera &camera) {
-            VideoThread::setFrameSource(&camera);
-        }
+    void setFrameSource(PyMindVisionCamera &camera) {
+        VideoThread::setFrameSource(&camera);
+    }
 
-        void clearFrameSource() {
-            VideoThread::clearFrameSource();
-        }
-    
+    void clearFrameSource() {
+        VideoThread::clearFrameSource();
+    }
+
     void addFrameBytes(int width, int height, int bytesPerLine, int format, py::bytes data) {
          char *buffer = nullptr;
          Py_ssize_t size = 0;
@@ -183,17 +183,33 @@ public:
 };
 
 PYBIND11_MODULE(_mindvision_qobject_py, m) {
-    m.doc() = "pybind11 wrapper for MindVision QObject library"; 
+    m.doc() = "pybind11 wrapper for MindVision QObject library";
 
     py::class_<QObject>(m, "QObject");
 
     // Bind PyMindVisionCamera but expose as MindVisionCamera
     py::class_<PyMindVisionCamera, QObject>(m, "MindVisionCamera")
         .def(py::init<QObject *>(), py::arg("parent") = nullptr)
+        .def("setRemoteMode", &MindVisionCamera::setRemoteMode)
+        .def("isRemoteMode", &MindVisionCamera::isRemoteMode)
+        .def("setRemoteEndpoint", &MindVisionCamera::setRemoteEndpoint,
+             py::arg("host"), py::arg("port") = 8766)
+        .def("remoteHost", &MindVisionCamera::remoteHost)
+        .def("remotePort", &MindVisionCamera::remotePort)
+        .def("setRemoteJpegQuality", &MindVisionCamera::setRemoteJpegQuality)
+        .def("remoteJpegQuality", &MindVisionCamera::remoteJpegQuality)
+        .def("setSyntheticMode", &MindVisionCamera::setSyntheticMode)
+        .def("isSyntheticMode", &MindVisionCamera::isSyntheticMode)
+        .def("startRemoteRecording", &MindVisionCamera::startRemoteRecording,
+             py::arg("width"), py::arg("height"), py::arg("fps"), py::arg("filename") = QString())
+        .def("stopRemoteRecording", &MindVisionCamera::stopRemoteRecording)
+        .def("isRemoteRecording", &MindVisionCamera::isRemoteRecording)
         .def("open", &MindVisionCamera::open)
         .def("close", &MindVisionCamera::close)
         .def("start", &MindVisionCamera::start)
         .def("stop", &MindVisionCamera::stop)
+        .def("isOpen", &MindVisionCamera::isOpen)
+        .def("isRunning", &MindVisionCamera::isRunning)
         .def("setAutoExposure", &MindVisionCamera::setAutoExposure)
         .def("setExposureTime", &MindVisionCamera::setExposureTime)
         .def("setAnalogGain", &MindVisionCamera::setAnalogGain)
@@ -238,6 +254,30 @@ PYBIND11_MODULE(_mindvision_qobject_py, m) {
         .def("registerFpsCallback", &PyMindVisionCamera::registerFpsCallback)
         .def("registerQueueStatsCallback", &PyMindVisionCamera::registerQueueStatsCallback)
         .def("registerErrorCallback", &PyMindVisionCamera::registerErrorCallback)
+        ;
+
+    py::class_<MindVisionCameraServer, QObject>(m, "MindVisionCameraServer")
+        .def(py::init<QObject *>(), py::arg("parent") = nullptr)
+        .def("startServer", &MindVisionCameraServer::startServer,
+             py::arg("bindAddress") = QStringLiteral("0.0.0.0"),
+             py::arg("port") = 8766)
+        .def("stopServer", &MindVisionCameraServer::stopServer)
+        .def("isListening", &MindVisionCameraServer::isListening)
+        .def("bindAddress", &MindVisionCameraServer::bindAddress)
+        .def("serverPort", &MindVisionCameraServer::serverPort)
+        .def("connectedClientCount", &MindVisionCameraServer::connectedClientCount)
+        .def("setSyntheticMode", &MindVisionCameraServer::setSyntheticMode)
+        .def("isSyntheticMode", &MindVisionCameraServer::isSyntheticMode)
+        .def("setJpegQuality", &MindVisionCameraServer::setJpegQuality)
+        .def("jpegQuality", &MindVisionCameraServer::jpegQuality)
+        .def("setRecordingDirectory", &MindVisionCameraServer::setRecordingDirectory)
+        .def("recordingDirectory", &MindVisionCameraServer::recordingDirectory)
+        .def("setKeepCameraOpen", &MindVisionCameraServer::setKeepCameraOpen)
+        .def("keepCameraOpen", &MindVisionCameraServer::keepCameraOpen)
+        .def("openCamera", &MindVisionCameraServer::openCamera)
+        .def("closeCamera", &MindVisionCameraServer::closeCamera)
+        .def("startCapture", &MindVisionCameraServer::startCapture)
+        .def("stopCapture", &MindVisionCameraServer::stopCapture)
         ;
 
     py::class_<PyVideoThread, QObject>(m, "VideoThread")

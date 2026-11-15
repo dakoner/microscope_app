@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 microscope-app = "run_microscope_app:main"
+microscope-camera-server = "run_camera_server:main"
 
 [build-system]
 requires = ["setuptools>=68"]

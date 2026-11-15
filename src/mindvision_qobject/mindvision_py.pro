@@ -1,4 +1,4 @@
-QT       += core gui
+QT       += core gui network
 
 TARGET = _mindvision_qobject_py
 TEMPLATE = lib
@@ -10,13 +10,19 @@ INCLUDEPATH += Include
 INCLUDEPATH += src
 
 # Python and pybind11 include paths
-PYTHON_INCLUDES = $$system(python3-config --includes 2>/dev/null)
-isEmpty(PYTHON_INCLUDES) {
-    PYTHON_INCLUDES = -I/usr/include/python3.12
-}
+PYTHON_BIN = $$PWD/../../.venv/bin/python
+!exists($$PYTHON_BIN): PYTHON_BIN = $$system(command -v python3)
+isEmpty(PYTHON_BIN): PYTHON_BIN = python3
+PYTHON_REAL = $$system(readlink -f $$PYTHON_BIN)
+PYTHON_LIBDIR = $$replace(PYTHON_REAL, /bin/[^/]+$, /lib)
+PYTHON_CONFIG = $$PYTHON_REAL-config
+!exists($$PYTHON_CONFIG): PYTHON_CONFIG = $$system(command -v python3-config)
+
+PYTHON_INCLUDES = $$system($$PYTHON_CONFIG --includes 2>/dev/null)
+isEmpty(PYTHON_INCLUDES): PYTHON_INCLUDES = $$system($$PYTHON_BIN -c "import sysconfig; print('-I' + sysconfig.get_paths()['include'])")
 QMAKE_CXXFLAGS += $$PYTHON_INCLUDES
 
-PYBIND11_INCLUDES = $$system(python3 -m pybind11 --includes 2>/dev/null)
+PYBIND11_INCLUDES = $$system($$PYTHON_BIN -m pybind11 --includes 2>/dev/null)
 isEmpty(PYBIND11_INCLUDES) {
     INCLUDEPATH += /usr/include/pybind11
 } else {
@@ -54,12 +60,21 @@ win32: {
     PYTHON_LIB_DIR = C:/Users/davidek/scoop/apps/python313/current/libs
     LIBS += -L$$PYTHON_LIB_DIR -lpython3.11
 } else: {
-    PYTHON_LDFLAGS = $$system(python3-config --embed --ldflags 2>/dev/null)
-    isEmpty(PYTHON_LDFLAGS) {
-        LIBS += -lpython3.12
-    } else {
+    PYTHON_LDFLAGS = $$system($$PYTHON_CONFIG --embed --ldflags 2>/dev/null)
+    isEmpty(PYTHON_LDFLAGS): PYTHON_LDFLAGS = $$system($$PYTHON_CONFIG --ldflags 2>/dev/null)
+    !isEmpty(PYTHON_LDFLAGS) {
         LIBS += $$PYTHON_LDFLAGS
     }
+    !isEmpty(PYTHON_LIBDIR) {
+        QMAKE_RPATHDIR += $$PYTHON_LIBDIR
+    }
+    PYSIDE_QT_LIB = $$PWD/../../.venv/lib/python3.11/site-packages/PySide6/Qt/lib
+    !exists($$PYSIDE_QT_LIB/libQt6Core.so.6): PYSIDE_QT_LIB = $$PWD/../../.venv/lib/python3.12/site-packages/PySide6/Qt/lib
+    QMAKE_LFLAGS += -Wl,--disable-new-dtags
+    exists($$PYSIDE_QT_LIB/libQt6Core.so.6) {
+        QMAKE_LFLAGS += -Wl,-rpath,$$PYSIDE_QT_LIB
+    }
+    QMAKE_RPATHDIR += $$OUT_PWD/release $$PWD/Lib
 }
 
 unix:!macx: {

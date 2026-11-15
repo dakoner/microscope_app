@@ -1,4 +1,4 @@
-QT += core gui widgets serialport
+QT += core gui widgets serialport network
 
 CONFIG += c++20
 CONFIG += link_pkgconfig
@@ -139,6 +139,7 @@ SOURCES += \
     $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
     $$SRC_DIR/editor_qobject/src/PythonScintillaEditor.cpp \
     $$SRC_DIR/mindvision_qobject/src/MindVisionCamera.cpp \
+    $$SRC_DIR/mindvision_qobject/src/MindVisionCameraServer.cpp \
     $$SRC_DIR/mindvision_qobject/src/VideoThread.cpp \
     $$SRC_DIR/serial_qobject/src/SerialWorker.cpp
 
@@ -154,7 +155,9 @@ HEADERS += \
     $$SRC_DIR/scan_config_paneL_qobject/src/ScanConfigPanel.h \
     $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.h \
     $$SRC_DIR/editor_qobject/src/PythonScintillaEditor.h \
+    $$SRC_DIR/mindvision_qobject/src/CameraNetworkProtocol.h \
     $$SRC_DIR/mindvision_qobject/src/MindVisionCamera.h \
+    $$SRC_DIR/mindvision_qobject/src/MindVisionCameraServer.h \
     $$SRC_DIR/mindvision_qobject/src/VideoThread.h \
     $$SRC_DIR/mindvision_qobject/src/mindvision_qobject_global.h \
     $$SRC_DIR/serial_qobject/src/SerialWorker.h
@@ -165,6 +168,6 @@ FORMS += \
 PY_MODULE_TARGET = $$DESTDIR/_microscope_app_cpp.so
 PY_MODULE_LINK = \
     $${QMAKE_DEL_FILE} $$PY_MODULE_TARGET $$escape_expand(\n\t)\
-    $$QMAKE_CXX $$QMAKE_LFLAGS -shared -o $$PY_MODULE_TARGET $$OBJECTS_DIR/*.o $$LIBS -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
+    $$QMAKE_CXX $$QMAKE_LFLAGS -shared -o $$PY_MODULE_TARGET $$OBJECTS_DIR/*.o $$LIBS -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Network.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
 
 QMAKE_POST_LINK += $$PY_MODULE_LINK

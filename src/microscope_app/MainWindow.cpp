@@ -14,6 +14,7 @@
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QFileDialog>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QMenuBar>
@@ -629,6 +630,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_rulerTabIndex = m_rightTabs->indexOf(ui->rulerPage);
     m_colorPickerTabIndex = m_rightTabs->indexOf(m_tabColorPicker);
     m_rightTabs->setTabVisible(m_colorPickerTabIndex, false);
+    createCameraConnectionPanel();
     createPythonConsole();
     startPythonInterpreter();
 
@@ -848,6 +850,121 @@ void MainWindow::closeEvent(QCloseEvent *event)
     m_ledController->stop();
 
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::createCameraConnectionPanel()
+{
+    if (m_cameraConnectionGroup || !ui || !ui->exposureGainPage) {
+        return;
+    }
+
+    auto *pageLayout = qobject_cast<QVBoxLayout *>(ui->exposureGainPage->layout());
+    if (!pageLayout) {
+        return;
+    }
+
+    m_cameraConnectionGroup = new QGroupBox("Camera Source", ui->exposureGainPage);
+    auto *form = new QFormLayout(m_cameraConnectionGroup);
+
+    m_comboCameraMode = new QComboBox(m_cameraConnectionGroup);
+    m_comboCameraMode->addItem("Local (MindVision SDK)", "local");
+    m_comboCameraMode->addItem("Remote (Network TCP)", "remote");
+    form->addRow("Mode:", m_comboCameraMode);
+
+    m_editRemoteHost = new QLineEdit("127.0.0.1", m_cameraConnectionGroup);
+    m_editRemoteHost->setPlaceholderText("127.0.0.1 or remote IP");
+    form->addRow("Remote Host:", m_editRemoteHost);
+
+    m_spinRemotePort = new QSpinBox(m_cameraConnectionGroup);
+    m_spinRemotePort->setRange(1, 65535);
+    m_spinRemotePort->setValue(8766);
+    form->addRow("Remote Port:", m_spinRemotePort);
+
+    m_spinRemoteJpegQuality = new QSpinBox(m_cameraConnectionGroup);
+    m_spinRemoteJpegQuality->setRange(0, 100);
+    m_spinRemoteJpegQuality->setValue(85);
+    m_spinRemoteJpegQuality->setToolTip("1..100 = JPEG quality, 0 = uncompressed Raw RGB888");
+    form->addRow("Stream Quality:", m_spinRemoteJpegQuality);
+
+    m_chkRemoteRecordOnServer = new QCheckBox("Record video on remote host", m_cameraConnectionGroup);
+    m_chkRemoteRecordOnServer->setChecked(false);
+    form->addRow(m_chkRemoteRecordOnServer);
+
+    m_btnConnectCamera = new QPushButton("Apply / Reconnect Camera", m_cameraConnectionGroup);
+    form->addRow(m_btnConnectCamera);
+
+    m_lblCameraConnectionStatus = new QLabel("Status: Not connected", m_cameraConnectionGroup);
+    m_lblCameraConnectionStatus->setWordWrap(true);
+    form->addRow(m_lblCameraConnectionStatus);
+
+    pageLayout->insertWidget(0, m_cameraConnectionGroup);
+
+    connect(m_comboCameraMode, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onCameraConnectionModeChanged);
+    connect(m_btnConnectCamera, &QPushButton::clicked,
+            this, &MainWindow::onReconnectCameraClicked);
+    connect(m_spinRemoteJpegQuality, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int quality) {
+                if (m_camera && m_camera->isRemoteMode()) {
+                    m_camera->setRemoteJpegQuality(quality);
+                }
+            });
+
+    onCameraConnectionModeChanged(m_comboCameraMode->currentIndex());
+}
+
+void MainWindow::onCameraConnectionModeChanged(int index)
+{
+    const bool remote = (index == 1);
+    if (m_editRemoteHost) m_editRemoteHost->setEnabled(remote);
+    if (m_spinRemotePort) m_spinRemotePort->setEnabled(remote);
+    if (m_spinRemoteJpegQuality) m_spinRemoteJpegQuality->setEnabled(remote);
+    if (m_chkRemoteRecordOnServer) m_chkRemoteRecordOnServer->setEnabled(remote);
+    updateCameraConnectionStatusLabel();
+}
+
+void MainWindow::syncCameraConnectionFromUi()
+{
+    if (!m_camera) {
+        return;
+    }
+    const bool remote = m_comboCameraMode && (m_comboCameraMode->currentIndex() == 1);
+    const QString host = m_editRemoteHost ? m_editRemoteHost->text().trimmed() : QStringLiteral("127.0.0.1");
+    const quint16 port = static_cast<quint16>(m_spinRemotePort ? m_spinRemotePort->value() : 8766);
+    const int quality = m_spinRemoteJpegQuality ? m_spinRemoteJpegQuality->value() : 85;
+    m_remoteRecordingTarget = remote && m_chkRemoteRecordOnServer && m_chkRemoteRecordOnServer->isChecked();
+
+    m_camera->setRemoteEndpoint(host.isEmpty() ? QStringLiteral("127.0.0.1") : host, port);
+    m_camera->setRemoteJpegQuality(quality);
+    m_camera->setRemoteMode(remote);
+    updateCameraConnectionStatusLabel();
+}
+
+void MainWindow::updateCameraConnectionStatusLabel()
+{
+    if (!m_lblCameraConnectionStatus || !m_camera) {
+        return;
+    }
+    if (m_camera->isRemoteMode()) {
+        m_lblCameraConnectionStatus->setText(
+            QString("Status: Remote %1:%2 (%3)")
+                .arg(m_camera->remoteHost())
+                .arg(m_camera->remotePort())
+                .arg(m_isCameraRunning ? "Streaming" : "Stopped"));
+    } else {
+        m_lblCameraConnectionStatus->setText(
+            QString("Status: Local SDK (%1)")
+                .arg(m_isCameraRunning ? "Streaming" : "Stopped"));
+    }
+}
+
+void MainWindow::onReconnectCameraClicked()
+{
+    if (m_isCameraRunning) {
+        onStopClicked();
+    }
+    syncCameraConnectionFromUi();
+    onStartClicked();
 }
 
 void MainWindow::createPythonConsole()
@@ -1487,6 +1604,7 @@ QPointF MainWindow::getImageCoords(const QPointF &mousePos)
 
 void MainWindow::onStartClicked()
 {
+    syncCameraConnectionFromUi();
     if (m_camera->open()) {
         if (m_camera->start()) {
             m_framesReceivedCount = 0;
@@ -1505,8 +1623,17 @@ void MainWindow::onStartClicked()
             applyCameraSettings();
             syncUi();
             m_paramPollTimer.start(200);
-            log("Camera started.");
+            updateCameraConnectionStatusLabel();
+            if (m_camera->isRemoteMode()) {
+                log(QString("Remote camera started (%1:%2).")
+                        .arg(m_camera->remoteHost())
+                        .arg(m_camera->remotePort()));
+            } else {
+                log("Camera started.");
+            }
         }
+    } else {
+        updateCameraConnectionStatusLabel();
     }
 }
 
@@ -1515,7 +1642,7 @@ void MainWindow::onStopClicked()
     m_paramPollTimer.stop();
     m_isCameraRunning = false;
     stopScanRecording(false);
-    if (m_videoThread->isRunning())
+    if (m_videoThread->isRunning() || (m_camera && m_camera->isRemoteRecording()))
         onRecordClicked();
 
     m_camera->stop();
@@ -1535,18 +1662,28 @@ void MainWindow::onStopClicked()
     m_videoLabel->setText("Camera Stopped");
     m_fpsLabel->setText("FPS: 0.0");
     updateFrameStatsLabel();
+    updateCameraConnectionStatusLabel();
     log("Camera stopped.");
 }
 
 void MainWindow::onRecordClicked()
 {
-    if (!m_videoThread->isRunning()) {
+    const bool remoteRecActive = m_camera && m_camera->isRemoteMode() && m_camera->isRemoteRecording();
+    if (!m_videoThread->isRunning() && !remoteRecActive) {
+        m_remoteRecordingTarget = m_camera && m_camera->isRemoteMode() &&
+                                  m_chkRemoteRecordOnServer && m_chkRemoteRecordOnServer->isChecked();
         m_recordingRequested = true;
         log("Recording requested...");
     } else {
-        m_videoThread->stopRecording();
+        if (remoteRecActive) {
+            m_camera->stopRemoteRecording();
+            log("Remote server recording stopped.");
+        }
+        if (m_videoThread->isRunning()) {
+            m_videoThread->stopRecording();
+            log("Recording stopped.");
+        }
         m_actionRecord->setText("Record");
-        log("Recording stopped.");
     }
 }
 
@@ -1580,7 +1717,16 @@ std::string MainWindow::mcpStatusJson() const
 {
     QJsonObject result;
     result["camera_running"] = m_isCameraRunning;
-    result["recording"] = m_videoThread && m_videoThread->isRunning();
+    result["camera_mode"] = (m_camera && m_camera->isRemoteMode()) ? "remote" : "local";
+    if (m_camera && m_camera->isRemoteMode()) {
+        result["remote_camera_host"] = m_camera->remoteHost();
+        result["remote_camera_port"] = static_cast<int>(m_camera->remotePort());
+        result["remote_jpeg_quality"] = m_camera->remoteJpegQuality();
+    }
+    const bool localRec = m_videoThread && m_videoThread->isRunning();
+    const bool remoteRec = m_camera && m_camera->isRemoteRecording();
+    result["recording"] = localRec || remoteRec;
+    result["remote_recording"] = remoteRec;
     result["recording_requested"] = m_recordingRequested;
     result["scanning"] = m_isScanning;
     result["yolo_inference"] = m_yoloInferenceActive;
@@ -1629,7 +1775,8 @@ std::string MainWindow::mcpSetRecordingJson(bool enabled)
     if (!m_isCameraRunning)
         return mcpJsonResult(false, "Start the camera before changing recording.");
 
-    const bool active = m_videoThread && m_videoThread->isRunning();
+    const bool active = (m_videoThread && m_videoThread->isRunning()) ||
+                        (m_camera && m_camera->isRemoteRecording());
     if (enabled && !active && !m_recordingRequested) {
         onRecordClicked();
     } else if (!enabled && (active || m_recordingRequested)) {
@@ -1709,13 +1856,23 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
     if (m_recordingRequested) {
         m_recordingRequested = false;
         double recordFps = m_currentFps > 0.1 ? m_currentFps : 30.0;
-        QDir videoDir(resolveOutputBaseDir());
-        videoDir.mkpath(".");
-        QString filename = videoDir.filePath(
-            QString("recording_%1.mkv").arg(QDateTime::currentSecsSinceEpoch()));
-        m_videoThread->startRecording(image.width(), image.height(), recordFps, filename);
-        m_actionRecord->setText("Stop Recording");
-        log(QString("Recording started: %1").arg(QFileInfo(filename).fileName()));
+        if (m_remoteRecordingTarget && m_camera && m_camera->isRemoteMode()) {
+            QString filename = QString("recording_%1.mkv").arg(QDateTime::currentSecsSinceEpoch());
+            if (m_camera->startRemoteRecording(image.width(), image.height(), recordFps, filename)) {
+                m_actionRecord->setText("Stop Recording");
+                log(QString("Remote server recording started: %1").arg(filename));
+            } else {
+                log("Failed to start remote server recording.");
+            }
+        } else {
+            QDir videoDir(resolveOutputBaseDir());
+            videoDir.mkpath(".");
+            QString filename = videoDir.filePath(
+                QString("recording_%1.mkv").arg(QDateTime::currentSecsSinceEpoch()));
+            m_videoThread->startRecording(image.width(), image.height(), recordFps, filename);
+            m_actionRecord->setText("Stop Recording");
+            log(QString("Recording started: %1").arg(QFileInfo(filename).fileName()));
+        }
     }
 
     m_currentImage = image;
@@ -2842,6 +2999,23 @@ void MainWindow::loadSettings()
         m_spinGain->setValue(settings.value("gain").toInt(1));
         m_chkAutoExposure->setChecked(settings.value("auto_exposure").toBool(true));
 
+        if (settings.contains("camera_mode") && m_comboCameraMode) {
+            const QString mode = settings.value("camera_mode").toString("local").toLower();
+            m_comboCameraMode->setCurrentIndex(mode == "remote" ? 1 : 0);
+        }
+        if (settings.contains("remote_camera_host") && m_editRemoteHost) {
+            m_editRemoteHost->setText(settings.value("remote_camera_host").toString("127.0.0.1"));
+        }
+        if (settings.contains("remote_camera_port") && m_spinRemotePort) {
+            m_spinRemotePort->setValue(settings.value("remote_camera_port").toInt(8766));
+        }
+        if (settings.contains("remote_jpeg_quality") && m_spinRemoteJpegQuality) {
+            m_spinRemoteJpegQuality->setValue(settings.value("remote_jpeg_quality").toInt(85));
+        }
+        if (settings.contains("remote_record_on_server") && m_chkRemoteRecordOnServer) {
+            m_chkRemoteRecordOnServer->setChecked(settings.value("remote_record_on_server").toBool(false));
+        }
+
         if (settings.contains("ruler_calibration")) {
             m_rulerCalibration = settings.value("ruler_calibration").toDouble();
             if (m_rulerCalibration > 0)
@@ -2854,6 +3028,48 @@ void MainWindow::loadSettings()
         log("Settings loaded.");
     }
 
+    // Allow environment variables / CLI overrides to take precedence over camera_settings.json
+    const QString envHost = qEnvironmentVariable("MICROSCOPE_CAMERA_HOST",
+                                                 qEnvironmentVariable("MINDVISION_REMOTE_HOST")).trimmed();
+    const QString envPort = qEnvironmentVariable("MICROSCOPE_CAMERA_PORT",
+                                                 qEnvironmentVariable("MINDVISION_REMOTE_PORT")).trimmed();
+    const QString envMode = qEnvironmentVariable("MICROSCOPE_CAMERA_MODE").trimmed().toLower();
+    const QString envQuality = qEnvironmentVariable("MICROSCOPE_CAMERA_JPEG_QUALITY").trimmed();
+    const QString envRemoteRec = qEnvironmentVariable("MICROSCOPE_CAMERA_REMOTE_RECORD").trimmed().toLower();
+
+    if (!envHost.isEmpty() && m_editRemoteHost) {
+        m_editRemoteHost->setText(envHost);
+        if (m_comboCameraMode && envMode.isEmpty()) {
+            m_comboCameraMode->setCurrentIndex(1);
+        }
+    }
+    if (!envPort.isEmpty() && m_spinRemotePort) {
+        bool ok = false;
+        const int p = envPort.toInt(&ok);
+        if (ok && p >= 1 && p <= 65535) {
+            m_spinRemotePort->setValue(p);
+        }
+    }
+    if (m_comboCameraMode) {
+        if (envMode == "remote") {
+            m_comboCameraMode->setCurrentIndex(1);
+        } else if (envMode == "local") {
+            m_comboCameraMode->setCurrentIndex(0);
+        }
+    }
+    if (!envQuality.isEmpty() && m_spinRemoteJpegQuality) {
+        bool ok = false;
+        const int q = envQuality.toInt(&ok);
+        if (ok) {
+            m_spinRemoteJpegQuality->setValue(std::clamp(q, 0, 100));
+        }
+    }
+    if (!envRemoteRec.isEmpty() && m_chkRemoteRecordOnServer) {
+        m_chkRemoteRecordOnServer->setChecked(
+            envRemoteRec == "1" || envRemoteRec == "true" || envRemoteRec == "yes");
+    }
+
+    syncCameraConnectionFromUi();
     loadStageSettings();
     initMosaicPanel();
 }
@@ -2876,6 +3092,17 @@ void MainWindow::saveSettings()
     settings["exposure_time"] = m_spinExposureTime->value();
     settings["gain"] = m_spinGain->value();
     settings["auto_exposure"] = m_chkAutoExposure->isChecked();
+    settings["camera_mode"] = (m_comboCameraMode && m_comboCameraMode->currentIndex() == 1)
+                                  ? QStringLiteral("remote")
+                                  : QStringLiteral("local");
+    if (m_editRemoteHost)
+        settings["remote_camera_host"] = m_editRemoteHost->text().trimmed();
+    if (m_spinRemotePort)
+        settings["remote_camera_port"] = m_spinRemotePort->value();
+    if (m_spinRemoteJpegQuality)
+        settings["remote_jpeg_quality"] = m_spinRemoteJpegQuality->value();
+    if (m_chkRemoteRecordOnServer)
+        settings["remote_record_on_server"] = m_chkRemoteRecordOnServer->isChecked();
     settings["ruler_calibration"] = m_rulerCalibration;
     settings["led_controller_port"] = m_ledController->getPort();
     if (m_cncControlPanel)

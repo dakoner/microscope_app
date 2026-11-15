@@ -14,10 +14,10 @@ EQ            = =
 
 CC            = gcc
 CXX           = g++
-DEFINES       = -DQT_DEPRECATED_WARNINGS -DQT_NO_DEBUG -DQT_GUI_LIB -DQT_CORE_LIB
+DEFINES       = -DQT_DEPRECATED_WARNINGS -DQT_NO_DEBUG -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB
 CFLAGS        = -pipe -O2 -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
-CXXFLAGS      = -pipe -I/usr/include/python3.12 -I/usr/include/python3.12 -I/usr/include/python3.12 -I/home/davidek/src/microtools/mindvision_python_app/.venv/lib/python3.12/site-packages/pybind11/include -O2 -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
-INCPATH       = -I. -IInclude -Isrc -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtCore -Irelease -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++
+CXXFLAGS      = -pipe -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -O2 -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
+INCPATH       = -I. -IInclude -Isrc -I/usr/include/pybind11 -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -Irelease -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++
 QMAKE         = /usr/bin/qmake6
 DEL_FILE      = rm -f
 CHK_DIR_EXISTS= test -d
@@ -37,10 +37,10 @@ MOVE          = mv -f
 TAR           = tar -cf
 COMPRESS      = gzip -9f
 DISTNAME      = _mindvision_qobject_py1.0.0
-DISTDIR = /home/davidek/src/microtools/mindvision_python_app/native/mindvision_qobject/release/_mindvision_qobject_py1.0.0
+DISTDIR = /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/_mindvision_qobject_py1.0.0
 LINK          = g++
-LFLAGS        = -Wl,-O1 -Wl,-rpath-link,/usr/lib/x86_64-linux-gnu -shared -Wl,-soname,lib_mindvision_qobject_py.so.1
-LIBS          = $(SUBLIBS) -L/home/davidek/src/microtools/mindvision_python_app/native/mindvision_qobject/release -lmindvision_qobject -L/home/davidek/src/microtools/mindvision_python_app/native/mindvision_qobject/Lib -lMVSDK -L/usr/lib/python3.12/config-3.12-x86_64-linux-gnu -L/usr/lib/x86_64-linux-gnu -lpython3.12 -ldl -lm /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL   
+LFLAGS        = -Wl,--disable-new-dtags -Wl,-rpath,/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/../../.venv/lib/python3.11/site-packages/PySide6/Qt/lib -Wl,-O1 -Wl,-rpath,/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib -Wl,-rpath,/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release -Wl,-rpath,/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -Wl,-rpath-link,/usr/lib/x86_64-linux-gnu -shared -Wl,-soname,lib_mindvision_qobject_py.so.1
+LIBS          = $(SUBLIBS) -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release -lmindvision_qobject -L/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Lib -lMVSDK -L/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib -lpython3.11 -ldl -lutil -lm /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6Network.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL   
 AR            = ar cqs
 RANLIB        = 
 SED           = sed
@@ -261,7 +261,7 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/qt_config.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qmake.conf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_post.prf \
-		.qmake.stash \
+		../../.qmake.stash \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/exclusive_builds.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/toolchain.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/default_pre.prf \
@@ -309,7 +309,7 @@ release/lib_mindvision_qobject_py.so.1.0.0:  $(OBJECTS) $(SUBLIBS) $(OBJCOMP)
 	-$(MOVE) $(TARGET0) release/$(TARGET0)
 	-$(MOVE) $(TARGET1) release/$(TARGET1)
 	-$(MOVE) $(TARGET2) release/$(TARGET2)
-	mv -f /home/davidek/src/microtools/mindvision_python_app/native/mindvision_qobject/release/lib_mindvision_qobject_py.so /home/davidek/src/microtools/mindvision_python_app/native/mindvision_qobject/release/_mindvision_qobject_py.so
+	mv -f /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/lib_mindvision_qobject_py.so /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/_mindvision_qobject_py.so
 
 
 
@@ -318,7 +318,7 @@ staticlib: release/lib_mindvision_qobject_py.a
 release/lib_mindvision_qobject_py.a:  $(OBJECTS) $(OBJCOMP) 
 	-$(DEL_FILE) $(TARGETA) 
 	$(AR) $(TARGETA) $(OBJECTS)
-	mv -f /home/davidek/src/microtools/mindvision_python_app/native/mindvision_qobject/release/lib_mindvision_qobject_py.so /home/davidek/src/microtools/mindvision_python_app/native/mindvision_qobject/release/_mindvision_qobject_py.so
+	mv -f /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/lib_mindvision_qobject_py.so /home/davidek/src/microtools/microscope_app/src/mindvision_qobject/release/_mindvision_qobject_py.so
 
 Makefile.mindvision_py: mindvision_py.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qmake.conf /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/common/unix.conf \
@@ -527,7 +527,7 @@ Makefile.mindvision_py: mindvision_py.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/qt_config.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qmake.conf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_post.prf \
-		.qmake.stash \
+		../../.qmake.stash \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/exclusive_builds.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/toolchain.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/default_pre.prf \
@@ -548,6 +548,7 @@ Makefile.mindvision_py: mindvision_py.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/lex.prf \
 		mindvision_py.pro \
 		/usr/lib/x86_64-linux-gnu/libQt6Gui.prl \
+		/usr/lib/x86_64-linux-gnu/libQt6Network.prl \
 		/usr/lib/x86_64-linux-gnu/libQt6Core.prl
 	$(QMAKE) -o Makefile.mindvision_py mindvision_py.pro
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf:
@@ -757,7 +758,7 @@ Makefile.mindvision_py: mindvision_py.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/qt_config.prf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qmake.conf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_post.prf:
-.qmake.stash:
+../../.qmake.stash:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/exclusive_builds.prf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/toolchain.prf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/default_pre.prf:
@@ -778,6 +779,7 @@ Makefile.mindvision_py: mindvision_py.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/lex.prf:
 mindvision_py.pro:
 /usr/lib/x86_64-linux-gnu/libQt6Gui.prl:
+/usr/lib/x86_64-linux-gnu/libQt6Network.prl:
 /usr/lib/x86_64-linux-gnu/libQt6Core.prl:
 qmake: FORCE
 	@$(QMAKE) -o Makefile.mindvision_py mindvision_py.pro
@@ -805,7 +807,6 @@ clean: compiler_clean
 distclean: clean 
 	-$(DEL_FILE) release/$(TARGET) 
 	-$(DEL_FILE) release/$(TARGET0) release/$(TARGET1) release/$(TARGET2) $(TARGETA)
-	-$(DEL_FILE) .qmake.stash
 	-$(DEL_FILE) Makefile.mindvision_py
 
 
@@ -825,7 +826,7 @@ compiler_moc_predefs_make_all: release/moc_predefs.h
 compiler_moc_predefs_clean:
 	-$(DEL_FILE) release/moc_predefs.h
 release/moc_predefs.h: /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
-	g++ -pipe -I/usr/include/python3.12 -I/usr/include/python3.12 -I/usr/include/python3.12 -I/home/davidek/src/microtools/mindvision_python_app/.venv/lib/python3.12/site-packages/pybind11/include -O2 -std=gnu++1z -Wall -Wextra -dM -E -o release/moc_predefs.h /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
+	g++ -pipe -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -O2 -std=gnu++1z -Wall -Wextra -dM -E -o release/moc_predefs.h /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
 
 compiler_moc_header_make_all:
 compiler_moc_header_clean:
@@ -845,6 +846,7 @@ compiler_clean: compiler_moc_predefs_clean
 
 release/mindvision_qobject_python.o: src/mindvision_qobject_python.cpp src/MindVisionCamera.h \
 		src/mindvision_qobject_global.h \
+		src/MindVisionCameraServer.h \
 		src/VideoThread.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/mindvision_qobject_python.o src/mindvision_qobject_python.cpp
 

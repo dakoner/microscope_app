@@ -6,3 +6,5 @@ videos
 models
 .codex
 __pycache__
+src/microscope_app.egg-info/
+camera_settings.json

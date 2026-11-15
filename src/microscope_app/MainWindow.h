@@ -84,6 +84,8 @@ private slots:
     void onRecordClicked();
     void onSnapshotClicked();
     void onHomeAndRunClicked();
+    void onCameraConnectionModeChanged(int index);
+    void onReconnectCameraClicked();
 
     // Camera settings
     void onAutoExposureToggled(bool checked);
@@ -149,6 +151,9 @@ private slots:
 
 private:
     void connectSignals();
+    void createCameraConnectionPanel();
+    void syncCameraConnectionFromUi();
+    void updateCameraConnectionStatusLabel();
     void createPythonConsole();
     bool executePythonCode(const QString &code,
                            const std::function<void(const QString &)> &appendOutput);
@@ -192,6 +197,7 @@ private:
     VideoThread *m_scanVideoThread = nullptr;
     bool m_isCameraRunning = false;
     bool m_recordingRequested = false;
+    bool m_remoteRecordingTarget = false;
     double m_currentFps = 30.0;
     double m_lastUiUpdateTime = 0.0;
     double m_lastMosaicUpdateTime = 0.0;
@@ -321,6 +327,14 @@ private:
     QPlainTextEdit *m_logTextEdit = nullptr;
 
     // Camera controls
+    QGroupBox *m_cameraConnectionGroup = nullptr;
+    QComboBox *m_comboCameraMode = nullptr;
+    QLineEdit *m_editRemoteHost = nullptr;
+    QSpinBox *m_spinRemotePort = nullptr;
+    QSpinBox *m_spinRemoteJpegQuality = nullptr;
+    QCheckBox *m_chkRemoteRecordOnServer = nullptr;
+    QPushButton *m_btnConnectCamera = nullptr;
+    QLabel *m_lblCameraConnectionStatus = nullptr;
     QCheckBox *m_chkAutoExposure = nullptr;
     QCheckBox *m_chkRoi = nullptr;
     QDoubleSpinBox *m_spinExposureTime = nullptr;

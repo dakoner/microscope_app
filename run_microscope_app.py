@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import os
 import sys
@@ -52,8 +53,66 @@ except ModuleNotFoundError as exc:
 from microscope_mcp import QtMicroscopeBridge, start_local_mcp_server
 
 
+def _apply_cli_camera_options(argv: list[str]) -> list[str]:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--remote-camera",
+        metavar="HOST[:PORT]",
+        help="Connect to a remote headless camera server (e.g. 192.168.1.50:8766).",
+    )
+    parser.add_argument(
+        "--camera-mode",
+        choices=("local", "remote"),
+        help="Select local MindVision SDK or remote TCP camera server.",
+    )
+    parser.add_argument("--camera-host", help="Remote camera server hostname or IP.")
+    parser.add_argument("--camera-port", type=int, help="Remote camera server TCP port.")
+    parser.add_argument(
+        "--camera-jpeg-quality",
+        type=int,
+        help="Remote stream JPEG quality (1..100, or 0 for uncompressed raw RGB888).",
+    )
+    parser.add_argument(
+        "--camera-remote-record",
+        action="store_true",
+        help="Record videos on the remote camera host instead of the local client.",
+    )
+    parser.add_argument(
+        "--synthetic-camera",
+        action="store_true",
+        help="Use synthetic test-pattern camera when in local mode.",
+    )
+    known, remaining = parser.parse_known_args(argv[1:])
+
+    if known.remote_camera:
+        endpoint = known.remote_camera.strip()
+        if ":" in endpoint:
+            host, port_str = endpoint.rsplit(":", 1)
+            os.environ["MICROSCOPE_CAMERA_HOST"] = host
+            os.environ["MICROSCOPE_CAMERA_PORT"] = port_str
+        else:
+            os.environ["MICROSCOPE_CAMERA_HOST"] = endpoint
+        os.environ["MICROSCOPE_CAMERA_MODE"] = "remote"
+
+    if known.camera_mode:
+        os.environ["MICROSCOPE_CAMERA_MODE"] = known.camera_mode
+    if known.camera_host:
+        os.environ["MICROSCOPE_CAMERA_HOST"] = known.camera_host
+    if known.camera_port is not None:
+        os.environ["MICROSCOPE_CAMERA_PORT"] = str(known.camera_port)
+    if known.camera_jpeg_quality is not None:
+        os.environ["MICROSCOPE_CAMERA_JPEG_QUALITY"] = str(known.camera_jpeg_quality)
+    if known.camera_remote_record:
+        os.environ["MICROSCOPE_CAMERA_REMOTE_RECORD"] = "1"
+    if known.synthetic_camera:
+        os.environ["MICROSCOPE_CAMERA_SYNTHETIC"] = "1"
+
+    return [argv[0], *remaining]
+
+
 def main() -> int:
-    app = QApplication(sys.argv)
+    qt_argv = _apply_cli_camera_options(sys.argv)
+    app = QApplication(qt_argv)
 
     window_ptr = native.create_main_window_ptr()
     main_window = shiboken6.wrapInstance(int(window_ptr), QMainWindow)
