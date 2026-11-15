@@ -1,9 +1,9 @@
 {
     "auto_exposure": false,
     "camera_mode": "remote",
-    "cnc_controller_port": "ttyS0",
-    "exposure_time": 0.074,
-    "gain": 147,
+    "cnc_controller_port": "",
+    "exposure_time": 0.517,
+    "gain": 5,
     "led_controller_port": "ttyS0",
     "remote_camera_host": "gork",
     "remote_camera_port": 8766,

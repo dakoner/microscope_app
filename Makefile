@@ -322,7 +322,6 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/qt_config.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qmake.conf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_post.prf \
-		.qmake.stash \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/exclusive_builds.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/toolchain.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/default_pre.prf \
@@ -597,7 +596,6 @@ Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qma
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/qt_config.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qmake.conf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_post.prf \
-		.qmake.stash \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/exclusive_builds.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/toolchain.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/default_pre.prf \
@@ -832,7 +830,6 @@ Makefile: microscope_app.pro /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qma
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/qt_config.prf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++/qmake.conf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_post.prf:
-.qmake.stash:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/exclusive_builds.prf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/toolchain.prf:
 /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/default_pre.prf:
@@ -1061,18 +1058,18 @@ release/.obj/main.o: src/microscope_app/main.cpp src/microscope_app/MainWindow.h
 release/.obj/MainWindow.o: src/microscope_app/MainWindow.cpp src/microscope_app/MainWindow.h \
 		src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
 		release/.ui/ui_MainWindow.h \
-		src/cnc_control_panel_qobject/src/CNCControlPanel.h \
-		src/serial_qobject/src/SerialWorker.h \
-		src/color_picker_widget_qobject/src/ColorPickerWidget.h \
-		src/intensity_chart_qobject/src/HistogramWidget.h \
-		src/intensity_chart_qobject/src/IntensityChart.h \
 		src/mindvision_qobject/src/MindVisionCamera.h \
 		src/mindvision_qobject/src/mindvision_qobject_global.h \
 		src/mindvision_qobject/src/VideoThread.h \
+		src/cnc_control_panel_qobject/src/CNCControlPanel.h \
+		src/serial_qobject/src/SerialWorker.h \
 		src/led_controller_qobject/src/LEDController.h \
 		src/mosaic_panel_qobject/src/MosaicPanel.h \
 		src/mosaic_panel_qobject/src/MosaicWidget.h \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.h \
+		src/intensity_chart_qobject/src/IntensityChart.h \
+		src/intensity_chart_qobject/src/HistogramWidget.h \
+		src/color_picker_widget_qobject/src/ColorPickerWidget.h \
 		src/editor_qobject/src/PythonScintillaEditor.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/MainWindow.o src/microscope_app/MainWindow.cpp
 
