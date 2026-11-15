@@ -52,7 +52,9 @@
 #include "IntensityChart.h"
 #include "HistogramWidget.h"
 #include "ColorPickerWidget.h"
+#if MICROSCOPE_ENABLE_YOLO
 #include "YOLOInferenceWorker.h"
+#endif
 #include "PythonScintillaEditor.h"
 
 static MainWindow *g_mainWindowForPython = nullptr;
@@ -648,6 +650,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->hardwareTabs->removeTab(ledIdx);
     ui->hardwareTabs->insertTab(ledIdx, m_ledController->widget(), "LED");
 
+#if MICROSCOPE_ENABLE_YOLO
     // YOLO Inference Worker
     m_yoloWorker = new YOLOInferenceWorker(this);
 
@@ -671,6 +674,7 @@ MainWindow::MainWindow(QWidget *parent)
     if (toolbar) {
         toolbar->addAction(m_actionYoloInference);
     }
+#endif
 
     // Create picture-in-picture labels
     m_videoPipLabel = new QLabel(m_mosaicTabContainer);
@@ -692,12 +696,14 @@ MainWindow::MainWindow(QWidget *parent)
 
     connectSignals();
 
+#if MICROSCOPE_ENABLE_YOLO
     if (m_yoloWorker) {
         m_yoloWorker->start();
         if (!m_yoloWorker->isRunning()) {
             log("YOLO worker failed to start at initialization. Toggle YOLO to retry.");
         }
     }
+#endif
 
     // Camera & video
     m_camera = new MindVisionCamera(this);
@@ -788,12 +794,14 @@ void MainWindow::connectSignals()
     connect(m_actionRuler, &QAction::toggled, this, &MainWindow::onRulerToggled);
     connect(m_actionColorPicker, &QAction::toggled, this, &MainWindow::onColorPickerToggled);
 
+#if MICROSCOPE_ENABLE_YOLO
     // YOLO Inference
     connect(m_actionYoloInference, &QAction::toggled, this, &MainWindow::onYoloToggled);
     if (m_yoloWorker) {
         connect(m_yoloWorker, &YOLOInferenceWorker::detectionsReady, this, &MainWindow::onDetectionsReady);
         connect(m_yoloWorker, &YOLOInferenceWorker::errorOccurred, this, &MainWindow::onYoloError);
     }
+#endif
 
     // Camera controls
     connect(m_chkAutoExposure, &QCheckBox::toggled, this, &MainWindow::onAutoExposureToggled);
@@ -1562,6 +1570,7 @@ void MainWindow::refreshVideoLabel()
         painter.end();
     }
 
+#if MICROSCOPE_ENABLE_YOLO
     // Draw YOLO detections if inference is active
     if (m_yoloInferenceActive && !m_latestDetections.empty()) {
         QPainter painter(&display);
@@ -1583,6 +1592,7 @@ void MainWindow::refreshVideoLabel()
         }
         painter.end();
     }
+#endif
 
     m_videoLabel->setPixmap(display.scaled(labelSize, Qt::KeepAspectRatio, Qt::FastTransformation));
     m_lastVideoLabelSize = labelSize;
@@ -1747,7 +1757,13 @@ std::string MainWindow::mcpStatusJson() const
     result["remote_recording"] = remoteRec;
     result["recording_requested"] = m_recordingRequested;
     result["scanning"] = m_isScanning;
+#if MICROSCOPE_ENABLE_YOLO
+    result["yolo_available"] = true;
     result["yolo_inference"] = m_yoloInferenceActive;
+#else
+    result["yolo_available"] = false;
+    result["yolo_inference"] = false;
+#endif
     result["frames_received"] = static_cast<qint64>(m_framesReceivedCount);
     result["frames_written_to_mosaic"] = static_cast<qint64>(m_framesWrittenToMosaicCount);
     result["fps"] = m_currentFps;
@@ -1836,12 +1852,19 @@ std::string MainWindow::mcpSetAutoExposureJson(bool enabled)
 
 std::string MainWindow::mcpSetYoloJson(bool enabled)
 {
+#if MICROSCOPE_ENABLE_YOLO
     if (m_actionYoloInference)
         m_actionYoloInference->setChecked(enabled);
     else
         onYoloToggled(enabled);
     return mcpJsonResult(m_yoloInferenceActive == enabled,
                          enabled ? "YOLO inference enabled." : "YOLO inference disabled.");
+#else
+    if (!enabled) {
+        return mcpJsonResult(true, "YOLO inference is disabled (not compiled in).");
+    }
+    return mcpJsonResult(false, "YOLO/TensorRT (nvinfer) support is not compiled in on this platform.");
+#endif
 }
 
 std::string MainWindow::mcpMoveStageJson(double xMm, double yMm, int feedrate)
@@ -1954,10 +1977,12 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
         }
     }
 
+#if MICROSCOPE_ENABLE_YOLO
     // YOLO inference
     if (m_yoloInferenceActive && m_yoloWorker && m_yoloWorker->isRunning()) {
         m_yoloWorker->inferFrame(image, m_yoloConfThreshold);
     }
+#endif
 }
 
 void MainWindow::updateFrameStatsLabel()
@@ -2360,6 +2385,7 @@ void MainWindow::onColorPickerToggled(bool checked)
     }
 }
 
+#if MICROSCOPE_ENABLE_YOLO
 // ---------- YOLO Inference ----------
 
 void MainWindow::onYoloToggled(bool checked)
@@ -2402,6 +2428,7 @@ void MainWindow::onYoloError(const QString &message)
         m_actionYoloInference->setChecked(false);
     }
 }
+#endif
 
 void MainWindow::updateColorPicker(const QPointF &pos)
 {

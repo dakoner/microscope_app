@@ -13,12 +13,23 @@
 #include <memory>
 #include <vector>
 
+#ifndef MICROSCOPE_ENABLE_YOLO
+#if __has_include(<NvInferRuntime.h>) && __has_include(<cuda_runtime_api.h>)
+#define MICROSCOPE_ENABLE_YOLO 1
+#else
+#define MICROSCOPE_ENABLE_YOLO 0
+#endif
+#endif
+
+#if MICROSCOPE_ENABLE_YOLO
 #pragma push_macro("slots")
 #undef slots
 #include <NvInferRuntime.h>
 #include <cuda_runtime_api.h>
 #pragma pop_macro("slots")
+#endif
 
+#if MICROSCOPE_ENABLE_YOLO
 namespace {
 constexpr int kInputSize = 640;
 constexpr float kNmsIouThreshold = 0.45f;
@@ -700,3 +711,61 @@ void YOLOInferenceWorker::applyNms(std::vector<Detection> &detections, float iou
 
     detections.swap(kept);
 }
+
+#else // !MICROSCOPE_ENABLE_YOLO
+
+struct YOLOInferenceWorker::Impl {};
+
+YOLOInferenceWorker::YOLOInferenceWorker(QObject *parent)
+    : QObject(parent)
+    , m_impl(std::make_unique<Impl>())
+{
+}
+
+YOLOInferenceWorker::~YOLOInferenceWorker() = default;
+
+QString YOLOInferenceWorker::resolveModelPath() const
+{
+    return QString();
+}
+
+void YOLOInferenceWorker::start()
+{
+    m_isRunning = false;
+    emit errorOccurred(QStringLiteral("YOLO/TensorRT (nvinfer) support is not compiled in on this platform."));
+}
+
+void YOLOInferenceWorker::stop()
+{
+    m_isRunning = false;
+}
+
+bool YOLOInferenceWorker::isRunning() const
+{
+    return false;
+}
+
+void YOLOInferenceWorker::inferFrame(const QImage &, float)
+{
+}
+
+std::vector<Detection> YOLOInferenceWorker::getLatestDetections() const
+{
+    return {};
+}
+
+std::vector<Detection> YOLOInferenceWorker::runInference(const QImage &, float)
+{
+    return {};
+}
+
+float YOLOInferenceWorker::intersectionOverUnion(const Detection &, const Detection &)
+{
+    return 0.0f;
+}
+
+void YOLOInferenceWorker::applyNms(std::vector<Detection> &, float)
+{
+}
+
+#endif // MICROSCOPE_ENABLE_YOLO

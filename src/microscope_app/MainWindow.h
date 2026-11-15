@@ -45,10 +45,16 @@ class QsciScintilla;
 struct _object;
 typedef _object PyObject;
 
+#ifndef MICROSCOPE_ENABLE_YOLO
+#define MICROSCOPE_ENABLE_YOLO 0
+#endif
+
+#if MICROSCOPE_ENABLE_YOLO
 // Include for Detection struct (needed for std::vector<Detection>)
 #include "YOLOInferenceWorker.h"
 
 class YOLOInferenceWorker;  // Forward declare again for the member pointer
+#endif
 
 class MainWindow : public QMainWindow
 {
@@ -115,10 +121,12 @@ private slots:
     void updateFps(double fps);
     void handleError(QString message);
 
+#if MICROSCOPE_ENABLE_YOLO
     // YOLO inference
     void onYoloToggled(bool checked);
     void onDetectionsReady(const std::vector<Detection> &detections);
     void onYoloError(const QString &message);
+#endif
 
     // Python console
     void startPythonInterpreter();
@@ -271,12 +279,14 @@ private:
     QElapsedTimer m_poseClock;
     std::deque<PoseSample> m_poseSamples;
 
+#if MICROSCOPE_ENABLE_YOLO
     // YOLO Inference / Tardigrade tracking
     YOLOInferenceWorker *m_yoloWorker = nullptr;
     std::vector<Detection> m_latestDetections;
     bool m_yoloInferenceActive = false;
     float m_yoloConfThreshold = 0.5f;
     QAction *m_actionYoloInference = nullptr;
+#endif
 
     // Python interpreter console
     bool m_pythonInitialized = false;

@@ -49,8 +49,7 @@ INCLUDEPATH += \
     $$SRC_DIR/intensity_chart_qobject/src \
     $$SRC_DIR/mosaic_panel_qobject/src \
     $$SRC_DIR/editor_qobject/src \
-    $$SRC_DIR/scan_config_paneL_qobject/src \
-    $$SRC_DIR/yolo_inference_qobject/src
+    $$SRC_DIR/scan_config_paneL_qobject/src
 
 # Library paths
 LIBS += -L$$MVSDK_LIB -lMVSDK
@@ -92,36 +91,66 @@ exists($$PYSIDE_QT_LIB/libQt6Core.so.6) {
     QMAKE_LFLAGS += -Wl,-rpath,$$PYSIDE_QT_LIB
 }
 
-# TensorRT runtime (engine inference backend)
-TENSORRT_INCLUDE = /usr/include/x86_64-linux-gnu
-TENSORRT_LIB = /usr/lib/x86_64-linux-gnu
-INCLUDEPATH += $$TENSORRT_INCLUDE
-LIBS += -L$$TENSORRT_LIB -lnvinfer -lnvinfer_plugin
-QMAKE_LFLAGS += -Wl,-rpath,$$TENSORRT_LIB
-
-# CUDA toolkit headers/libraries required by TensorRT headers/runtime.
-CUDA_INCLUDE = /usr/local/cuda/targets/x86_64-linux/include
-CUDA_LIB = /usr/local/cuda/targets/x86_64-linux/lib
-
-!exists($$CUDA_INCLUDE/cuda_runtime_api.h): CUDA_INCLUDE = /usr/local/cuda-13.2/targets/x86_64-linux/include
-!exists($$CUDA_LIB/libcudart.so): CUDA_LIB = /usr/local/cuda-13.2/targets/x86_64-linux/lib
-
-!exists($$CUDA_INCLUDE/cuda_runtime_api.h): CUDA_INCLUDE = /usr/local/cuda-13.1/targets/x86_64-linux/include
-!exists($$CUDA_LIB/libcudart.so): CUDA_LIB = /usr/local/cuda-13.1/targets/x86_64-linux/lib
-
-exists($$CUDA_INCLUDE/cuda_runtime_api.h) {
-    INCLUDEPATH += $$CUDA_INCLUDE
-}
-
-exists($$CUDA_LIB/libcudart.so) {
-    LIBS += -L$$CUDA_LIB -lcudart
-    QMAKE_LFLAGS += -Wl,-rpath,$$CUDA_LIB
-} else {
-    LIBS += -lcudart
-}
-
 # Preprocessor definitions
 DEFINES += MINDVISION_QOBJECT_LIBRARY
+
+# Optional YOLO / TensorRT (nvinfer) + CUDA support.
+# Disable explicitly with: qmake6 "CONFIG+=no_yolo" or qmake6 "ENABLE_YOLO=0"
+# Enable explicitly with:  qmake6 "CONFIG+=with_yolo" or qmake6 "ENABLE_YOLO=1"
+# Default: auto-detect whether TensorRT (NvInferRuntime.h + libnvinfer.so) and CUDA exist.
+TENSORRT_INCLUDE = /usr/include/x86_64-linux-gnu
+!exists($$TENSORRT_INCLUDE/NvInferRuntime.h): TENSORRT_INCLUDE = /usr/include/aarch64-linux-gnu
+!exists($$TENSORRT_INCLUDE/NvInferRuntime.h): TENSORRT_INCLUDE = /usr/include
+
+TENSORRT_LIB = /usr/lib/x86_64-linux-gnu
+!exists($$TENSORRT_LIB/libnvinfer.so): TENSORRT_LIB = /usr/lib/aarch64-linux-gnu
+!exists($$TENSORRT_LIB/libnvinfer.so): TENSORRT_LIB = /usr/local/lib
+
+CUDA_INCLUDE = /usr/local/cuda/targets/x86_64-linux/include
+CUDA_LIB = /usr/local/cuda/targets/x86_64-linux/lib
+!exists($$CUDA_INCLUDE/cuda_runtime_api.h): CUDA_INCLUDE = /usr/local/cuda-13.2/targets/x86_64-linux/include
+!exists($$CUDA_LIB/libcudart.so): CUDA_LIB = /usr/local/cuda-13.2/targets/x86_64-linux/lib
+!exists($$CUDA_INCLUDE/cuda_runtime_api.h): CUDA_INCLUDE = /usr/local/cuda-13.1/targets/x86_64-linux/include
+!exists($$CUDA_LIB/libcudart.so): CUDA_LIB = /usr/local/cuda-13.1/targets/x86_64-linux/lib
+!exists($$CUDA_INCLUDE/cuda_runtime_api.h): CUDA_INCLUDE = /usr/local/cuda/targets/aarch64-linux/include
+!exists($$CUDA_LIB/libcudart.so): CUDA_LIB = /usr/local/cuda/targets/aarch64-linux/lib
+!exists($$CUDA_INCLUDE/cuda_runtime_api.h): CUDA_INCLUDE = /usr/local/cuda/include
+!exists($$CUDA_LIB/libcudart.so): CUDA_LIB = /usr/local/cuda/lib64
+
+USE_YOLO = 0
+!CONFIG(no_yolo):!equals(ENABLE_YOLO, 0):!equals(ENABLE_YOLO, false) {
+    CONFIG(with_yolo)|equals(ENABLE_YOLO, 1)|equals(ENABLE_YOLO, true) {
+        USE_YOLO = 1
+    } else:exists($$TENSORRT_INCLUDE/NvInferRuntime.h):exists($$TENSORRT_LIB/libnvinfer.so):exists($$CUDA_INCLUDE/cuda_runtime_api.h) {
+        USE_YOLO = 1
+    }
+}
+
+equals(USE_YOLO, 1) {
+    message("Building microscope_app WITH YOLO/TensorRT (nvinfer) support.")
+    DEFINES += MICROSCOPE_ENABLE_YOLO=1
+    INCLUDEPATH += $$SRC_DIR/yolo_inference_qobject/src $$TENSORRT_INCLUDE $$CUDA_INCLUDE
+    LIBS += -L$$TENSORRT_LIB -lnvinfer -lnvinfer_plugin
+    QMAKE_LFLAGS += -Wl,-rpath,$$TENSORRT_LIB
+    exists($$CUDA_LIB/libcudart.so) {
+        LIBS += -L$$CUDA_LIB -lcudart
+        QMAKE_LFLAGS += -Wl,-rpath,$$CUDA_LIB
+    } else {
+        LIBS += -lcudart
+    }
+    SOURCES += $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.cpp
+    HEADERS += $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.h
+} else {
+    message("Building microscope_app WITHOUT YOLO/TensorRT (nvinfer) support.")
+    DEFINES += MICROSCOPE_ENABLE_YOLO=0
+    CONFIG(debug, debug|release) {
+        OBJECTS_DIR = ./debug/.obj_no_yolo
+        MOC_DIR = ./debug/.moc_no_yolo
+    } else {
+        OBJECTS_DIR = ./release/.obj_no_yolo
+        MOC_DIR = ./release/.moc_no_yolo
+    }
+}
 
 # Shared sources
 SOURCES += \
@@ -136,7 +165,6 @@ SOURCES += \
     $$SRC_DIR/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
     $$SRC_DIR/led_controller_qobject/src/LEDController.cpp \
     $$SRC_DIR/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
-    $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
     $$SRC_DIR/editor_qobject/src/PythonScintillaEditor.cpp \
     $$SRC_DIR/mindvision_qobject/src/MindVisionCamera.cpp \
     $$SRC_DIR/mindvision_qobject/src/MindVisionCameraServer.cpp \
@@ -153,7 +181,6 @@ HEADERS += \
     $$SRC_DIR/color_picker_widget_qobject/src/ColorPickerWidget.h \
     $$SRC_DIR/led_controller_qobject/src/LEDController.h \
     $$SRC_DIR/scan_config_paneL_qobject/src/ScanConfigPanel.h \
-    $$SRC_DIR/yolo_inference_qobject/src/YOLOInferenceWorker.h \
     $$SRC_DIR/editor_qobject/src/PythonScintillaEditor.h \
     $$SRC_DIR/mindvision_qobject/src/CameraNetworkProtocol.h \
     $$SRC_DIR/mindvision_qobject/src/MindVisionCamera.h \
@@ -166,7 +193,11 @@ FORMS += \
     $$APP_DIR/MainWindow.ui
 
 PY_MODULE_TARGET = $$DESTDIR/_microscope_app_cpp.so
+!equals(USE_YOLO, 1) {
+    CLEAN_STALE_YOLO_OBJS = $${QMAKE_DEL_FILE} $$OBJECTS_DIR/*YOLOInferenceWorker*.o $$escape_expand(\n\t)
+}
 PY_MODULE_LINK = \
+    $$CLEAN_STALE_YOLO_OBJS \
     $${QMAKE_DEL_FILE} $$PY_MODULE_TARGET $$escape_expand(\n\t)\
     $$QMAKE_CXX $$QMAKE_LFLAGS -shared -o $$PY_MODULE_TARGET $$OBJECTS_DIR/*.o $$LIBS -ltiff /usr/lib/x86_64-linux-gnu/libQt6Widgets.so /usr/lib/x86_64-linux-gnu/libQt6Gui.so /usr/lib/x86_64-linux-gnu/libGLX.so /usr/lib/x86_64-linux-gnu/libOpenGL.so /usr/lib/x86_64-linux-gnu/libQt6SerialPort.so /usr/lib/x86_64-linux-gnu/libQt6Network.so /usr/lib/x86_64-linux-gnu/libQt6Core.so -lpthread -lGLX -lOpenGL
 

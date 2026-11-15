@@ -14,7 +14,7 @@ EQ            = =
 
 CC            = gcc
 CXX           = g++
-DEFINES       = -DMINDVISION_QOBJECT_LIBRARY -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_SERIALPORT_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB
+DEFINES       = -DMINDVISION_QOBJECT_LIBRARY -DMICROSCOPE_ENABLE_YOLO=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_SERIALPORT_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB
 CFLAGS        = -pipe -O2 -Wall -Wextra -fPIC -D_REENTRANT $(DEFINES)
 CXXFLAGS      = -pipe -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -O2 -std=gnu++2a -Wall -Wextra -fPIC -D_REENTRANT $(DEFINES)
 INCPATH       = -I. -I/usr/include/x86_64-linux-gnu/qt6/Qsci -Isrc/microscope_app -Isrc/mindvision_qobject/Include -Isrc/mindvision_qobject/src -Isrc/cnc_control_panel_qobject/src -Isrc/serial_qobject/src -Isrc/led_controller_qobject/src -Isrc/color_picker_widget_qobject/src -Isrc/intensity_chart_qobject/src -Isrc/mosaic_panel_qobject/src -Isrc/editor_qobject/src -Isrc/scan_config_paneL_qobject/src -Isrc/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -Irelease/.moc -Irelease/.ui -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++
@@ -52,7 +52,8 @@ OBJECTS_DIR   = release/.obj/
 
 ####### Files
 
-SOURCES       = src/microscope_app/main.cpp \
+SOURCES       = src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
+		src/microscope_app/main.cpp \
 		src/microscope_app/MainWindow.cpp \
 		src/microscope_app/microscope_app_python.cpp \
 		src/cnc_control_panel_qobject/src/CNCControlPanel.cpp \
@@ -63,12 +64,12 @@ SOURCES       = src/microscope_app/main.cpp \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
 		src/led_controller_qobject/src/LEDController.cpp \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
 		src/editor_qobject/src/PythonScintillaEditor.cpp \
 		src/mindvision_qobject/src/MindVisionCamera.cpp \
 		src/mindvision_qobject/src/MindVisionCameraServer.cpp \
 		src/mindvision_qobject/src/VideoThread.cpp \
-		src/serial_qobject/src/SerialWorker.cpp release/.moc/moc_MainWindow.cpp \
+		src/serial_qobject/src/SerialWorker.cpp release/.moc/moc_YOLOInferenceWorker.cpp \
+		release/.moc/moc_MainWindow.cpp \
 		release/.moc/moc_CNCControlPanel.cpp \
 		release/.moc/moc_MosaicWidget.cpp \
 		release/.moc/moc_MosaicPanel.cpp \
@@ -77,13 +78,13 @@ SOURCES       = src/microscope_app/main.cpp \
 		release/.moc/moc_ColorPickerWidget.cpp \
 		release/.moc/moc_LEDController.cpp \
 		release/.moc/moc_ScanConfigPanel.cpp \
-		release/.moc/moc_YOLOInferenceWorker.cpp \
 		release/.moc/moc_PythonScintillaEditor.cpp \
 		release/.moc/moc_MindVisionCamera.cpp \
 		release/.moc/moc_MindVisionCameraServer.cpp \
 		release/.moc/moc_VideoThread.cpp \
 		release/.moc/moc_SerialWorker.cpp
-OBJECTS       = release/.obj/main.o \
+OBJECTS       = release/.obj/YOLOInferenceWorker.o \
+		release/.obj/main.o \
 		release/.obj/MainWindow.o \
 		release/.obj/microscope_app_python.o \
 		release/.obj/CNCControlPanel.o \
@@ -94,12 +95,12 @@ OBJECTS       = release/.obj/main.o \
 		release/.obj/ColorPickerWidget.o \
 		release/.obj/LEDController.o \
 		release/.obj/ScanConfigPanel.o \
-		release/.obj/YOLOInferenceWorker.o \
 		release/.obj/PythonScintillaEditor.o \
 		release/.obj/MindVisionCamera.o \
 		release/.obj/MindVisionCameraServer.o \
 		release/.obj/VideoThread.o \
 		release/.obj/SerialWorker.o \
+		release/.obj/moc_YOLOInferenceWorker.o \
 		release/.obj/moc_MainWindow.o \
 		release/.obj/moc_CNCControlPanel.o \
 		release/.obj/moc_MosaicWidget.o \
@@ -109,7 +110,6 @@ OBJECTS       = release/.obj/main.o \
 		release/.obj/moc_ColorPickerWidget.o \
 		release/.obj/moc_LEDController.o \
 		release/.obj/moc_ScanConfigPanel.o \
-		release/.obj/moc_YOLOInferenceWorker.o \
 		release/.obj/moc_PythonScintillaEditor.o \
 		release/.obj/moc_MindVisionCamera.o \
 		release/.obj/moc_MindVisionCameraServer.o \
@@ -343,7 +343,8 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/exceptions.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/yacc.prf \
 		/usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/lex.prf \
-		microscope_app.pro src/microscope_app/MainWindow.h \
+		microscope_app.pro src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
+		src/microscope_app/MainWindow.h \
 		src/cnc_control_panel_qobject/src/CNCControlPanel.h \
 		src/mosaic_panel_qobject/src/MosaicWidget.h \
 		src/mosaic_panel_qobject/src/MosaicPanel.h \
@@ -352,14 +353,14 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.h \
 		src/led_controller_qobject/src/LEDController.h \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.h \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
 		src/editor_qobject/src/PythonScintillaEditor.h \
 		src/mindvision_qobject/src/CameraNetworkProtocol.h \
 		src/mindvision_qobject/src/MindVisionCamera.h \
 		src/mindvision_qobject/src/MindVisionCameraServer.h \
 		src/mindvision_qobject/src/VideoThread.h \
 		src/mindvision_qobject/src/mindvision_qobject_global.h \
-		src/serial_qobject/src/SerialWorker.h src/microscope_app/main.cpp \
+		src/serial_qobject/src/SerialWorker.h src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
+		src/microscope_app/main.cpp \
 		src/microscope_app/MainWindow.cpp \
 		src/microscope_app/microscope_app_python.cpp \
 		src/cnc_control_panel_qobject/src/CNCControlPanel.cpp \
@@ -370,7 +371,6 @@ DIST          = /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/spec_pre.prf \
 		src/color_picker_widget_qobject/src/ColorPickerWidget.cpp \
 		src/led_controller_qobject/src/LEDController.cpp \
 		src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp \
-		src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp \
 		src/editor_qobject/src/PythonScintillaEditor.cpp \
 		src/mindvision_qobject/src/MindVisionCamera.cpp \
 		src/mindvision_qobject/src/MindVisionCameraServer.cpp \
@@ -874,8 +874,8 @@ distdir: FORCE
 	@test -d $(DISTDIR) || mkdir -p $(DISTDIR)
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents src/microscope_app/MainWindow.h src/cnc_control_panel_qobject/src/CNCControlPanel.h src/mosaic_panel_qobject/src/MosaicWidget.h src/mosaic_panel_qobject/src/MosaicPanel.h src/intensity_chart_qobject/src/IntensityChart.h src/intensity_chart_qobject/src/HistogramWidget.h src/color_picker_widget_qobject/src/ColorPickerWidget.h src/led_controller_qobject/src/LEDController.h src/scan_config_paneL_qobject/src/ScanConfigPanel.h src/yolo_inference_qobject/src/YOLOInferenceWorker.h src/editor_qobject/src/PythonScintillaEditor.h src/mindvision_qobject/src/CameraNetworkProtocol.h src/mindvision_qobject/src/MindVisionCamera.h src/mindvision_qobject/src/MindVisionCameraServer.h src/mindvision_qobject/src/VideoThread.h src/mindvision_qobject/src/mindvision_qobject_global.h src/serial_qobject/src/SerialWorker.h $(DISTDIR)/
-	$(COPY_FILE) --parents src/microscope_app/main.cpp src/microscope_app/MainWindow.cpp src/microscope_app/microscope_app_python.cpp src/cnc_control_panel_qobject/src/CNCControlPanel.cpp src/mosaic_panel_qobject/src/MosaicWidget.cpp src/mosaic_panel_qobject/src/MosaicPanel.cpp src/intensity_chart_qobject/src/IntensityChart.cpp src/intensity_chart_qobject/src/HistogramWidget.cpp src/color_picker_widget_qobject/src/ColorPickerWidget.cpp src/led_controller_qobject/src/LEDController.cpp src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp src/editor_qobject/src/PythonScintillaEditor.cpp src/mindvision_qobject/src/MindVisionCamera.cpp src/mindvision_qobject/src/MindVisionCameraServer.cpp src/mindvision_qobject/src/VideoThread.cpp src/serial_qobject/src/SerialWorker.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents src/yolo_inference_qobject/src/YOLOInferenceWorker.h src/microscope_app/MainWindow.h src/cnc_control_panel_qobject/src/CNCControlPanel.h src/mosaic_panel_qobject/src/MosaicWidget.h src/mosaic_panel_qobject/src/MosaicPanel.h src/intensity_chart_qobject/src/IntensityChart.h src/intensity_chart_qobject/src/HistogramWidget.h src/color_picker_widget_qobject/src/ColorPickerWidget.h src/led_controller_qobject/src/LEDController.h src/scan_config_paneL_qobject/src/ScanConfigPanel.h src/editor_qobject/src/PythonScintillaEditor.h src/mindvision_qobject/src/CameraNetworkProtocol.h src/mindvision_qobject/src/MindVisionCamera.h src/mindvision_qobject/src/MindVisionCameraServer.h src/mindvision_qobject/src/VideoThread.h src/mindvision_qobject/src/mindvision_qobject_global.h src/serial_qobject/src/SerialWorker.h $(DISTDIR)/
+	$(COPY_FILE) --parents src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp src/microscope_app/main.cpp src/microscope_app/MainWindow.cpp src/microscope_app/microscope_app_python.cpp src/cnc_control_panel_qobject/src/CNCControlPanel.cpp src/mosaic_panel_qobject/src/MosaicWidget.cpp src/mosaic_panel_qobject/src/MosaicPanel.cpp src/intensity_chart_qobject/src/IntensityChart.cpp src/intensity_chart_qobject/src/HistogramWidget.cpp src/color_picker_widget_qobject/src/ColorPickerWidget.cpp src/led_controller_qobject/src/LEDController.cpp src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp src/editor_qobject/src/PythonScintillaEditor.cpp src/mindvision_qobject/src/MindVisionCamera.cpp src/mindvision_qobject/src/MindVisionCameraServer.cpp src/mindvision_qobject/src/VideoThread.cpp src/serial_qobject/src/SerialWorker.cpp $(DISTDIR)/
 	$(COPY_FILE) --parents src/microscope_app/MainWindow.ui $(DISTDIR)/
 
 
@@ -908,9 +908,14 @@ compiler_moc_predefs_clean:
 release/.moc/moc_predefs.h: /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
 	g++ -pipe -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -I/home/davidek/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/include/python3.11 -O2 -std=gnu++2a -Wall -Wextra -fPIC -dM -E -o release/.moc/moc_predefs.h /usr/lib/x86_64-linux-gnu/qt6/mkspecs/features/data/dummy.cpp
 
-compiler_moc_header_make_all: release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_HistogramWidget.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_MindVisionCameraServer.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
+compiler_moc_header_make_all: release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_HistogramWidget.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_MindVisionCameraServer.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
 compiler_moc_header_clean:
-	-$(DEL_FILE) release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_HistogramWidget.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_MindVisionCameraServer.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
+	-$(DEL_FILE) release/.moc/moc_YOLOInferenceWorker.cpp release/.moc/moc_MainWindow.cpp release/.moc/moc_CNCControlPanel.cpp release/.moc/moc_MosaicWidget.cpp release/.moc/moc_MosaicPanel.cpp release/.moc/moc_IntensityChart.cpp release/.moc/moc_HistogramWidget.cpp release/.moc/moc_ColorPickerWidget.cpp release/.moc/moc_LEDController.cpp release/.moc/moc_ScanConfigPanel.cpp release/.moc/moc_PythonScintillaEditor.cpp release/.moc/moc_MindVisionCamera.cpp release/.moc/moc_MindVisionCameraServer.cpp release/.moc/moc_VideoThread.cpp release/.moc/moc_SerialWorker.cpp
+release/.moc/moc_YOLOInferenceWorker.cpp: src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
+		release/.moc/moc_predefs.h \
+		/usr/lib/qt6/libexec/moc
+	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/yolo_inference_qobject/src/YOLOInferenceWorker.h -o release/.moc/moc_YOLOInferenceWorker.cpp
+
 release/.moc/moc_MainWindow.cpp: src/microscope_app/MainWindow.h \
 		src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
 		release/.moc/moc_predefs.h \
@@ -959,11 +964,6 @@ release/.moc/moc_ScanConfigPanel.cpp: src/scan_config_paneL_qobject/src/ScanConf
 		release/.moc/moc_predefs.h \
 		/usr/lib/qt6/libexec/moc
 	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/scan_config_paneL_qobject/src/ScanConfigPanel.h -o release/.moc/moc_ScanConfigPanel.cpp
-
-release/.moc/moc_YOLOInferenceWorker.cpp: src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
-		release/.moc/moc_predefs.h \
-		/usr/lib/qt6/libexec/moc
-	/usr/lib/qt6/libexec/moc $(DEFINES) --include /home/davidek/src/microtools/microscope_app/release/.moc/moc_predefs.h -I/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++ -I/home/davidek/src/microtools/microscope_app -I/usr/include/x86_64-linux-gnu/qt6/Qsci -I/home/davidek/src/microtools/microscope_app/src/microscope_app -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/Include -I/home/davidek/src/microtools/microscope_app/src/mindvision_qobject/src -I/home/davidek/src/microtools/microscope_app/src/cnc_control_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/serial_qobject/src -I/home/davidek/src/microtools/microscope_app/src/led_controller_qobject/src -I/home/davidek/src/microtools/microscope_app/src/color_picker_widget_qobject/src -I/home/davidek/src/microtools/microscope_app/src/intensity_chart_qobject/src -I/home/davidek/src/microtools/microscope_app/src/mosaic_panel_qobject/src -I/home/davidek/src/microtools/microscope_app/src/editor_qobject/src -I/home/davidek/src/microtools/microscope_app/src/scan_config_paneL_qobject/src -I/home/davidek/src/microtools/microscope_app/src/yolo_inference_qobject/src -I/usr/include/x86_64-linux-gnu -I/usr/local/cuda/targets/x86_64-linux/include -I/usr/include/webp -I/usr/include/x86_64-linux-gnu/qt6 -I/usr/include/x86_64-linux-gnu/qt6/QtWidgets -I/usr/include/x86_64-linux-gnu/qt6/QtGui -I/usr/include/x86_64-linux-gnu/qt6/QtSerialPort -I/usr/include/x86_64-linux-gnu/qt6/QtNetwork -I/usr/include/x86_64-linux-gnu/qt6/QtCore -I/usr/include/c++/13 -I/usr/include/x86_64-linux-gnu/c++/13 -I/usr/include/c++/13/backward -I/usr/lib/gcc/x86_64-linux-gnu/13/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/yolo_inference_qobject/src/YOLOInferenceWorker.h -o release/.moc/moc_YOLOInferenceWorker.cpp
 
 release/.moc/moc_PythonScintillaEditor.cpp: src/editor_qobject/src/PythonScintillaEditor.h \
 		release/.moc/moc_predefs.h \
@@ -1042,6 +1042,18 @@ compiler_clean: compiler_moc_predefs_clean compiler_moc_header_clean compiler_mo
 
 ####### Compile
 
+release/.obj/YOLOInferenceWorker.o: src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
+		/usr/local/cuda/targets/x86_64-linux/include/cuda_runtime_api.h \
+		/usr/local/cuda/targets/x86_64-linux/include/crt/host_defines.h \
+		/usr/local/cuda/targets/x86_64-linux/include/builtin_types.h \
+		/usr/local/cuda/targets/x86_64-linux/include/device_types.h \
+		/usr/local/cuda/targets/x86_64-linux/include/driver_types.h \
+		/usr/local/cuda/targets/x86_64-linux/include/vector_types.h \
+		/usr/local/cuda/targets/x86_64-linux/include/surface_types.h \
+		/usr/local/cuda/targets/x86_64-linux/include/texture_types.h \
+		/usr/local/cuda/targets/x86_64-linux/include/cuda_device_runtime_api.h
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/YOLOInferenceWorker.o src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp
+
 release/.obj/main.o: src/microscope_app/main.cpp src/microscope_app/MainWindow.h \
 		src/yolo_inference_qobject/src/YOLOInferenceWorker.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/main.o src/microscope_app/main.cpp
@@ -1098,18 +1110,6 @@ release/.obj/LEDController.o: src/led_controller_qobject/src/LEDController.cpp s
 release/.obj/ScanConfigPanel.o: src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp src/scan_config_paneL_qobject/src/ScanConfigPanel.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/ScanConfigPanel.o src/scan_config_paneL_qobject/src/ScanConfigPanel.cpp
 
-release/.obj/YOLOInferenceWorker.o: src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp src/yolo_inference_qobject/src/YOLOInferenceWorker.h \
-		/usr/local/cuda/targets/x86_64-linux/include/cuda_runtime_api.h \
-		/usr/local/cuda/targets/x86_64-linux/include/crt/host_defines.h \
-		/usr/local/cuda/targets/x86_64-linux/include/builtin_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/device_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/driver_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/vector_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/surface_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/texture_types.h \
-		/usr/local/cuda/targets/x86_64-linux/include/cuda_device_runtime_api.h
-	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/YOLOInferenceWorker.o src/yolo_inference_qobject/src/YOLOInferenceWorker.cpp
-
 release/.obj/PythonScintillaEditor.o: src/editor_qobject/src/PythonScintillaEditor.cpp src/editor_qobject/src/PythonScintillaEditor.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/PythonScintillaEditor.o src/editor_qobject/src/PythonScintillaEditor.cpp
 
@@ -1140,6 +1140,9 @@ release/.obj/SerialWorker.o: src/serial_qobject/src/SerialWorker.cpp src/serial_
 		src/mindvision_qobject/src/CameraNetworkProtocol.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/SerialWorker.o src/serial_qobject/src/SerialWorker.cpp
 
+release/.obj/moc_YOLOInferenceWorker.o: release/.moc/moc_YOLOInferenceWorker.cpp 
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_YOLOInferenceWorker.o release/.moc/moc_YOLOInferenceWorker.cpp
+
 release/.obj/moc_MainWindow.o: release/.moc/moc_MainWindow.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_MainWindow.o release/.moc/moc_MainWindow.cpp
 
@@ -1166,9 +1169,6 @@ release/.obj/moc_LEDController.o: release/.moc/moc_LEDController.cpp
 
 release/.obj/moc_ScanConfigPanel.o: release/.moc/moc_ScanConfigPanel.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_ScanConfigPanel.o release/.moc/moc_ScanConfigPanel.cpp
-
-release/.obj/moc_YOLOInferenceWorker.o: release/.moc/moc_YOLOInferenceWorker.cpp 
-	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_YOLOInferenceWorker.o release/.moc/moc_YOLOInferenceWorker.cpp
 
 release/.obj/moc_PythonScintillaEditor.o: release/.moc/moc_PythonScintillaEditor.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release/.obj/moc_PythonScintillaEditor.o release/.moc/moc_PythonScintillaEditor.cpp
