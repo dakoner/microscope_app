@@ -1,8 +1,17 @@
-"""Local MCP server for the microscope application.
+"""Local MCP servers for the microscope hardware daemon and GUI workstation.
 
-The server intentionally listens only on loopback.  Its tools are invoked on
-the Qt GUI thread through ``QtMicroscopeBridge``; the MCP worker never calls
-the native hardware/UI objects directly.
+Supports three profiles:
+- ``hardware``: Camera and stage hardware tools hosted by ``run_camera_server.py``
+  (default ``http://127.0.0.1:8765/mcp``).
+- ``app``: Workstation/GUI-only tools (YOLO overlay, mosaic/scanning status)
+  hosted by ``run_microscope_app.py`` when connected to a remote camera server
+  (default ``http://127.0.0.1:8767/mcp``), avoiding duplicate hardware tools.
+- ``full``: Combined hardware + GUI tools hosted by ``run_microscope_app.py``
+  when running directly against local hardware (default ``http://127.0.0.1:8765/mcp``).
+
+All listeners default to loopback (``127.0.0.1``). Tool calls are marshaled onto
+the Qt thread through ``QtMicroscopeBridge``; the MCP worker never touches
+native hardware or Qt objects directly.
 """
 
 from __future__ import annotations
@@ -12,12 +21,18 @@ import logging
 import os
 import threading
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
 
 
 LOG = logging.getLogger(__name__)
+
+McpMode = Literal["full", "hardware", "app"]
+TargetKind = Literal["window", "camera_server"]
+
+DEFAULT_HARDWARE_MCP_PORT = 8765
+DEFAULT_APP_MCP_PORT = 8767
 
 
 @dataclass
@@ -34,33 +49,46 @@ class QtMicroscopeBridge(QObject):
 
     _requested = Signal(object)
 
-    def __init__(self, native_module: Any, window_ptr: int) -> None:
+    def __init__(
+        self,
+        native_module: Any,
+        target_ptr: int,
+        *,
+        target_kind: TargetKind = "window",
+    ) -> None:
         super().__init__()
+        if target_kind not in {"window", "camera_server"}:
+            raise ValueError(f"Unsupported MCP target_kind: {target_kind}")
         self._native = native_module
-        self._window_ptr = window_ptr
+        self._target_ptr = target_ptr
+        self._target_kind: TargetKind = target_kind
         self._closed = False
         self._requested.connect(self._execute, Qt.QueuedConnection)
+
+    @property
+    def target_kind(self) -> TargetKind:
+        return self._target_kind
 
     def close(self) -> None:
         self._closed = True
 
     def call(self, operation: str, *args: Any, timeout_seconds: float = 15) -> dict[str, Any]:
         if self._closed:
-            raise RuntimeError("The microscope application is closing.")
+            raise RuntimeError("The microscope server is closing.")
 
         # Useful for direct tests and avoids a deadlock if a call ever originates
-        # from the GUI thread.
+        # from the Qt thread.
         if QThread.currentThread() == self.thread():
             return self._call_native(operation, args)
 
         pending = _PendingCall(operation, args, threading.Event())
         self._requested.emit(pending)
         if not pending.done.wait(timeout_seconds):
-            raise TimeoutError("The microscope application did not answer the MCP request in time.")
+            raise TimeoutError("The microscope server did not answer the MCP request in time.")
         if pending.error:
             raise pending.error
         if pending.result is None:
-            raise RuntimeError("The microscope application returned no result.")
+            raise RuntimeError("The microscope server returned no result.")
         return json.loads(pending.result)
 
     @Slot(object)
@@ -73,19 +101,37 @@ class QtMicroscopeBridge(QObject):
             pending.done.set()
 
     def _call_native(self, operation: str, args: tuple[Any, ...]) -> dict[str, Any]:
-        methods: dict[str, Callable[..., str]] = {
-            "status": lambda: self._native.mcp_status_ptr(self._window_ptr),
-            "start_camera": lambda: self._native.mcp_start_camera_ptr(self._window_ptr),
-            "stop_camera": lambda: self._native.mcp_stop_camera_ptr(self._window_ptr),
-            "snapshot": lambda: self._native.mcp_snapshot_ptr(self._window_ptr),
-            "recording": lambda: self._native.mcp_set_recording_ptr(self._window_ptr, *args),
-            "exposure": lambda: self._native.mcp_set_exposure_ptr(self._window_ptr, *args),
-            "gain": lambda: self._native.mcp_set_gain_ptr(self._window_ptr, *args),
-            "auto_exposure": lambda: self._native.mcp_set_auto_exposure_ptr(self._window_ptr, *args),
-            "yolo": lambda: self._native.mcp_set_yolo_ptr(self._window_ptr, *args),
-            "move_stage": lambda: self._native.mcp_move_stage_ptr(self._window_ptr, *args),
-            "emergency_stop_stage": lambda: self._native.mcp_emergency_stop_stage_ptr(self._window_ptr),
-        }
+        if self._target_kind == "camera_server":
+            methods: dict[str, Callable[..., str]] = {
+                "status": lambda: self._native.camera_server_mcp_status_ptr(self._target_ptr),
+                "start_camera": lambda: self._native.camera_server_mcp_start_camera_ptr(self._target_ptr),
+                "stop_camera": lambda: self._native.camera_server_mcp_stop_camera_ptr(self._target_ptr),
+                "snapshot": lambda: self._native.camera_server_mcp_snapshot_ptr(self._target_ptr),
+                "recording": lambda: self._native.camera_server_mcp_set_recording_ptr(self._target_ptr, *args),
+                "exposure": lambda: self._native.camera_server_mcp_set_exposure_ptr(self._target_ptr, *args),
+                "gain": lambda: self._native.camera_server_mcp_set_gain_ptr(self._target_ptr, *args),
+                "auto_exposure": lambda: self._native.camera_server_mcp_set_auto_exposure_ptr(
+                    self._target_ptr, *args
+                ),
+                "move_stage": lambda: self._native.camera_server_mcp_move_stage_ptr(self._target_ptr, *args),
+                "emergency_stop_stage": lambda: self._native.camera_server_mcp_emergency_stop_stage_ptr(
+                    self._target_ptr
+                ),
+            }
+        else:
+            methods = {
+                "status": lambda: self._native.mcp_status_ptr(self._target_ptr),
+                "start_camera": lambda: self._native.mcp_start_camera_ptr(self._target_ptr),
+                "stop_camera": lambda: self._native.mcp_stop_camera_ptr(self._target_ptr),
+                "snapshot": lambda: self._native.mcp_snapshot_ptr(self._target_ptr),
+                "recording": lambda: self._native.mcp_set_recording_ptr(self._target_ptr, *args),
+                "exposure": lambda: self._native.mcp_set_exposure_ptr(self._target_ptr, *args),
+                "gain": lambda: self._native.mcp_set_gain_ptr(self._target_ptr, *args),
+                "auto_exposure": lambda: self._native.mcp_set_auto_exposure_ptr(self._target_ptr, *args),
+                "yolo": lambda: self._native.mcp_set_yolo_ptr(self._target_ptr, *args),
+                "move_stage": lambda: self._native.mcp_move_stage_ptr(self._target_ptr, *args),
+                "emergency_stop_stage": lambda: self._native.mcp_emergency_stop_stage_ptr(self._target_ptr),
+            }
         try:
             response = methods[operation]()
         except KeyError as exc:
@@ -93,31 +139,10 @@ class QtMicroscopeBridge(QObject):
         return json.loads(response)
 
 
-def create_server(bridge: QtMicroscopeBridge, *, port: int) -> Any:
-    """Create an MCP server without starting a listener.
-
-    Importing MCP here keeps the regular microscope UI usable when optional
-    MCP dependencies have not been installed yet.
-    """
-    from mcp.server.fastmcp import FastMCP
-
-    server = FastMCP(
-        "microscope-app",
-        instructions=(
-            "Control a local microscope application. Inspect status before changing "
-            "hardware. Never move the stage unless the user explicitly confirms the "
-            "destination and the move_stage tool's confirm argument is true."
-        ),
-        # FastMCP 1.x receives listener configuration at construction time;
-        # run() only receives the transport selection.
-        host="127.0.0.1",
-        port=port,
-        streamable_http_path="/mcp",
-    )
-
+def _register_hardware_tools(server: Any, bridge: QtMicroscopeBridge) -> None:
     @server.tool()
     def get_microscope_status() -> dict[str, Any]:
-        """Get camera, recording, AI inference, and stage position/state."""
+        """Get camera, recording, and stage position/state."""
         return bridge.call("status")
 
     @server.tool()
@@ -159,11 +184,6 @@ def create_server(bridge: QtMicroscopeBridge, *, port: int) -> Any:
         return {"ok": all(result["ok"] for result in results.values()), "results": results}
 
     @server.tool()
-    def set_object_detection(enabled: bool) -> dict[str, Any]:
-        """Enable or disable the microscope's YOLO object-detection overlay."""
-        return bridge.call("yolo", enabled)
-
-    @server.tool()
     def move_stage(
         x_mm: float,
         y_mm: float,
@@ -186,31 +206,146 @@ def create_server(bridge: QtMicroscopeBridge, *, port: int) -> Any:
         """Immediately request a stage stop. Use when stage motion should be halted."""
         return bridge.call("emergency_stop_stage")
 
+
+def _register_app_tools(server: Any, bridge: QtMicroscopeBridge, *, include_app_status: bool) -> None:
+    if include_app_status:
+        @server.tool()
+        def get_app_status() -> dict[str, Any]:
+            """Get workstation GUI status (remote endpoint, YOLO overlay, scanning, mosaic/frame counts)."""
+            raw = bridge.call("status")
+            app_fields = (
+                "ok",
+                "message",
+                "camera_mode",
+                "remote_camera_host",
+                "remote_camera_port",
+                "remote_jpeg_quality",
+                "camera_running",
+                "recording",
+                "remote_recording",
+                "scanning",
+                "yolo_available",
+                "yolo_inference",
+                "frames_received",
+                "frames_written_to_mosaic",
+                "fps",
+            )
+            result = {k: raw[k] for k in app_fields if k in raw}
+            result["role"] = "app"
+            return result
+
+    @server.tool()
+    def set_object_detection(enabled: bool) -> dict[str, Any]:
+        """Enable or disable the microscope GUI's YOLO object-detection overlay."""
+        return bridge.call("yolo", enabled)
+
+
+def create_server(
+    bridge: QtMicroscopeBridge,
+    *,
+    port: int,
+    host: str = "127.0.0.1",
+    mode: McpMode = "full",
+) -> Any:
+    """Create an MCP server without starting a listener.
+
+    Importing MCP here keeps the regular microscope tools usable when optional
+    MCP dependencies have not been installed yet.
+    """
+    if mode not in {"full", "hardware", "app"}:
+        raise ValueError(f"Unsupported MCP mode: {mode}")
+
+    from mcp.server.fastmcp import FastMCP
+
+    if mode == "hardware":
+        name = "microscope-hardware"
+        instructions = (
+            "Control the microscope camera and CNC stage hardware server. Inspect status "
+            "before changing hardware. Never move the stage unless the user explicitly "
+            "confirms the destination and the move_stage tool's confirm argument is true."
+        )
+    elif mode == "app":
+        name = "microscope-app"
+        instructions = (
+            "Control workstation GUI features of the microscope application (such as YOLO "
+            "object-detection overlay and mosaic/scanning status). Direct camera and stage "
+            "hardware control is provided by the separate microscope-hardware MCP server."
+        )
+    else:
+        name = "microscope-app"
+        instructions = (
+            "Control a local microscope application. Inspect status before changing "
+            "hardware. Never move the stage unless the user explicitly confirms the "
+            "destination and the move_stage tool's confirm argument is true."
+        )
+
+    server = FastMCP(
+        name,
+        instructions=instructions,
+        # FastMCP 1.x receives listener configuration at construction time;
+        # run() only receives the transport selection.
+        host=host,
+        port=port,
+        streamable_http_path="/mcp",
+    )
+
+    if mode in {"full", "hardware"}:
+        _register_hardware_tools(server, bridge)
+    if mode in {"full", "app"}:
+        _register_app_tools(server, bridge, include_app_status=(mode == "app"))
+
     return server
 
 
-def start_local_mcp_server(bridge: QtMicroscopeBridge) -> threading.Thread | None:
-    """Start the loopback-only Streamable HTTP listener in a daemon thread."""
-    if os.environ.get("MICROSCOPE_MCP_ENABLED", "1").lower() in {"0", "false", "no"}:
-        LOG.info("Microscope MCP server disabled by MICROSCOPE_MCP_ENABLED.")
+def start_local_mcp_server(
+    bridge: QtMicroscopeBridge,
+    *,
+    mode: McpMode = "full",
+    port: int | None = None,
+    host: str | None = None,
+    enabled: bool | None = None,
+) -> threading.Thread | None:
+    """Start the Streamable HTTP MCP listener in a daemon thread."""
+    if enabled is False:
+        LOG.info("Microscope MCP server (%s) disabled by CLI flag.", mode)
+        return None
+    if enabled is None and os.environ.get("MICROSCOPE_MCP_ENABLED", "1").lower() in {
+        "0",
+        "false",
+        "no",
+    }:
+        LOG.info("Microscope MCP server (%s) disabled by MICROSCOPE_MCP_ENABLED.", mode)
         return None
 
-    try:
-        port = int(os.environ.get("MICROSCOPE_MCP_PORT", "8765"))
-        if not 1 <= port <= 65535:
-            raise ValueError
-    except ValueError:
-        raise ValueError("MICROSCOPE_MCP_PORT must be an integer from 1 through 65535.")
+    bind_host = (host or os.environ.get("MICROSCOPE_MCP_BIND") or "127.0.0.1").strip()
+    if not bind_host:
+        bind_host = "127.0.0.1"
+
+    default_port = DEFAULT_APP_MCP_PORT if mode == "app" else DEFAULT_HARDWARE_MCP_PORT
+    if port is None:
+        env_port = os.environ.get("MICROSCOPE_MCP_PORT")
+        try:
+            resolved_port = int(env_port) if env_port else default_port
+        except ValueError as exc:
+            raise ValueError("MICROSCOPE_MCP_PORT must be an integer from 1 through 65535.") from exc
+    else:
+        resolved_port = port
+
+    if not 1 <= resolved_port <= 65535:
+        raise ValueError("MCP port must be an integer from 1 through 65535.")
 
     def run() -> None:
         try:
-            create_server(bridge, port=port).run(transport="streamable-http")
+            create_server(bridge, port=resolved_port, host=bind_host, mode=mode).run(
+                transport="streamable-http"
+            )
         except ModuleNotFoundError:
             LOG.warning("MCP integration is unavailable; install the project's MCP dependency.")
         except Exception:
-            LOG.exception("Microscope MCP server stopped unexpectedly.")
+            LOG.exception("Microscope MCP server (%s) stopped unexpectedly.", mode)
 
-    thread = threading.Thread(target=run, name="microscope-mcp", daemon=True)
+    thread = threading.Thread(target=run, name=f"microscope-mcp-{mode}", daemon=True)
     thread.start()
-    LOG.info("Microscope MCP server starting at http://127.0.0.1:%s/mcp", port)
+    print(f"Microscope MCP server ({mode}) starting at http://{bind_host}:{resolved_port}/mcp", flush=True)
+    LOG.info("Microscope MCP server (%s) starting at http://%s:%s/mcp", mode, bind_host, resolved_port)
     return thread

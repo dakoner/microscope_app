@@ -1,17 +1,60 @@
 # Microscope MCP integration
 
-Launching `microscope-app` also starts a local, Streamable HTTP MCP server at
-`http://127.0.0.1:8765/mcp`. It is bound to loopback only, so it is not exposed
-to the local network.
+The microscope stack splits MCP responsibilities between the **hardware server**
+and the **GUI workstation**, while keeping a combined server when the GUI runs
+directly against local hardware.
 
-Install the project dependencies first (the MCP SDK is included in
-`pyproject.toml`). Then add the URL above as a Streamable HTTP MCP connector in
-your AI client. The server provides status, camera, snapshot, recording,
-camera-settings, object-detection, stage-motion, and emergency-stop tools.
+All MCP servers use Streamable HTTP and bind to `127.0.0.1` (loopback only) by
+default so unauthenticated hardware controls are never exposed to the LAN unless
+explicitly configured.
+
+## Server profiles
+
+### 1. Headless hardware server (`microscope-camera-server` / `run_camera_server.py`)
+- **Default URL:** `http://127.0.0.1:8765/mcp`
+- **Server name:** `microscope-hardware`
+- **Tools:**
+  - `get_microscope_status` — camera, recording, TCP client count, and stage state/position
+  - `start_camera` / `stop_camera`
+  - `capture_snapshot`
+  - `set_recording`
+  - `set_camera_settings` (`exposure_ms`, `gain`, `auto_exposure`)
+  - `move_stage` (requires `confirm=true`)
+  - `emergency_stop_stage`
+
+### 2. GUI app in remote mode (`microscope-app --remote HOST[:PORT]`)
+When the GUI connects to a remote `camera_server`, it automatically switches its
+MCP server to **app-only mode** so hardware tools are not duplicated and ports do
+not collide:
+- **Default URL:** `http://127.0.0.1:8767/mcp`
+- **Server name:** `microscope-app`
+- **Tools:**
+  - `get_app_status` — remote endpoint info, scanning state, YOLO state, FPS, and frame/mosaic counters
+  - `set_object_detection` — enable/disable the YOLO overlay
+
+### 3. GUI app in local mode (`microscope-app`)
+When the GUI drives local hardware directly (no `camera_server`), it starts in
+**full mode**:
+- **Default URL:** `http://127.0.0.1:8765/mcp`
+- **Server name:** `microscope-app`
+- **Tools:** All hardware tools above plus `set_object_detection`.
+
+## Safety
 
 Stage motion requires `confirm=true`; an AI should set that only after the user
 has explicitly confirmed the requested destination. No unrestricted G-code
 execution is exposed.
 
-Set `MICROSCOPE_MCP_PORT` to choose another local port, or set
-`MICROSCOPE_MCP_ENABLED=0` to launch the UI without the MCP server.
+## Configuration
+
+CLI flags (supported by both `run_camera_server.py` and `run_microscope_app.py`):
+- `--mcp-port PORT` — override the MCP HTTP port
+- `--mcp-bind ADDR` — override the bind address (defaults to `127.0.0.1`)
+- `--no-mcp` — disable the MCP server
+- `--mcp-mode {auto,full,app}` — (`run_microscope_app.py` only; default `auto`)
+
+Environment variables:
+- `MICROSCOPE_MCP_ENABLED=0` — disable the MCP server
+- `MICROSCOPE_MCP_PORT` — override the default port (`8765` for hardware/full, `8767` for app)
+- `MICROSCOPE_MCP_BIND` — override the bind address (default `127.0.0.1`)
+- `MICROSCOPE_MCP_MODE` — (`run_microscope_app.py` only: `auto`, `full`, or `app`)

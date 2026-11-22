@@ -50,10 +50,10 @@ except ModuleNotFoundError as exc:
         "then launch with `uv run run_microscope_app.py`."
     ) from exc
 
-from microscope_mcp import QtMicroscopeBridge, start_local_mcp_server
+from microscope_mcp import McpMode, QtMicroscopeBridge, start_local_mcp_server
 
 
-def _apply_cli_camera_options(argv: list[str]) -> list[str]:
+def _apply_cli_options(argv: list[str]) -> tuple[list[str], argparse.Namespace]:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         "--remote-camera",
@@ -94,6 +94,28 @@ def _apply_cli_camera_options(argv: list[str]) -> list[str]:
         action="store_true",
         help="Automatically connect to the CNC stage serial port on startup.",
     )
+    parser.add_argument(
+        "--mcp-mode",
+        choices=("auto", "full", "app"),
+        default=os.environ.get("MICROSCOPE_MCP_MODE", "auto").lower(),
+        help="MCP tool profile: 'auto' uses 'app' in remote mode and 'full' in local mode.",
+    )
+    parser.add_argument(
+        "--mcp-port",
+        type=int,
+        default=None,
+        help="Port for the GUI MCP server (default: 8767 in 'app' mode, 8765 in 'full' mode).",
+    )
+    parser.add_argument(
+        "--mcp-bind",
+        default=None,
+        help="Bind address for the GUI MCP server (default: MICROSCOPE_MCP_BIND or 127.0.0.1).",
+    )
+    parser.add_argument(
+        "--no-mcp",
+        action="store_true",
+        help="Disable the embedded GUI MCP server.",
+    )
     known, remaining = parser.parse_known_args(argv[1:])
 
     if known.remote_camera:
@@ -123,19 +145,33 @@ def _apply_cli_camera_options(argv: list[str]) -> list[str]:
     if known.auto_connect_stage:
         os.environ["MICROSCOPE_STAGE_AUTO_CONNECT"] = "1"
 
-    return [argv[0], *remaining]
+    return [argv[0], *remaining], known
+
+
+def _resolve_mcp_mode(requested: str, bridge: QtMicroscopeBridge) -> McpMode:
+    if requested in {"full", "app"}:
+        return requested  # type: ignore[return-value]
+    status = bridge.call("status")
+    return "app" if status.get("camera_mode") == "remote" else "full"
 
 
 def main() -> int:
-    qt_argv = _apply_cli_camera_options(sys.argv)
+    qt_argv, opts = _apply_cli_options(sys.argv)
     app = QApplication(qt_argv)
 
     window_ptr = native.create_main_window_ptr()
     main_window = shiboken6.wrapInstance(int(window_ptr), QMainWindow)
     native.show_maximized_ptr(window_ptr)
-    mcp_bridge = QtMicroscopeBridge(native, int(window_ptr))
+    mcp_bridge = QtMicroscopeBridge(native, int(window_ptr), target_kind="window")
     app.aboutToQuit.connect(mcp_bridge.close)
-    start_local_mcp_server(mcp_bridge)
+    mcp_mode = _resolve_mcp_mode(opts.mcp_mode, mcp_bridge)
+    start_local_mcp_server(
+        mcp_bridge,
+        mode=mcp_mode,
+        port=opts.mcp_port,
+        host=opts.mcp_bind,
+        enabled=False if opts.no_mcp else None,
+    )
 
     exit_code = app.exec()
 

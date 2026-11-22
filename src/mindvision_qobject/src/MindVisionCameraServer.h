@@ -6,6 +6,7 @@
 #include <QString>
 #include <QStringList>
 #include <QtGlobal>
+#include <string>
 
 #include "mindvision_qobject_global.h"
 
@@ -60,6 +61,18 @@ public:
     Q_INVOKABLE int stageBaudRate() const;
     Q_INVOKABLE bool sendStageCommand(const QString &cmd);
     Q_INVOKABLE bool sendStageRawCommand(const QByteArray &rawCmd);
+
+    // Thread-affine entry points used by the headless hardware MCP bridge.
+    std::string mcpStatusJson() const;
+    std::string mcpStartCameraJson();
+    std::string mcpStopCameraJson();
+    std::string mcpSnapshotJson();
+    std::string mcpSetRecordingJson(bool enabled);
+    std::string mcpSetExposureJson(double milliseconds);
+    std::string mcpSetGainJson(int gain);
+    std::string mcpSetAutoExposureJson(bool enabled);
+    std::string mcpMoveStageJson(double xMm, double yMm, int feedrate);
+    std::string mcpEmergencyStopStageJson();
 
     MindVisionCamera *camera() const;
 

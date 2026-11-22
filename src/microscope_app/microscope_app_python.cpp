@@ -128,4 +128,35 @@ PYBIND11_MODULE(_microscope_app_cpp, m)
             delete server;
         }
     });
+
+    m.def("camera_server_mcp_status_ptr", [](std::uintptr_t ptr) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpStatusJson();
+    });
+    m.def("camera_server_mcp_start_camera_ptr", [](std::uintptr_t ptr) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpStartCameraJson();
+    });
+    m.def("camera_server_mcp_stop_camera_ptr", [](std::uintptr_t ptr) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpStopCameraJson();
+    });
+    m.def("camera_server_mcp_snapshot_ptr", [](std::uintptr_t ptr) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpSnapshotJson();
+    });
+    m.def("camera_server_mcp_set_recording_ptr", [](std::uintptr_t ptr, bool enabled) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpSetRecordingJson(enabled);
+    });
+    m.def("camera_server_mcp_set_exposure_ptr", [](std::uintptr_t ptr, double milliseconds) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpSetExposureJson(milliseconds);
+    });
+    m.def("camera_server_mcp_set_gain_ptr", [](std::uintptr_t ptr, int gain) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpSetGainJson(gain);
+    });
+    m.def("camera_server_mcp_set_auto_exposure_ptr", [](std::uintptr_t ptr, bool enabled) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpSetAutoExposureJson(enabled);
+    });
+    m.def("camera_server_mcp_move_stage_ptr", [](std::uintptr_t ptr, double x, double y, int feedrate) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpMoveStageJson(x, y, feedrate);
+    });
+    m.def("camera_server_mcp_emergency_stop_stage_ptr", [](std::uintptr_t ptr) {
+        return reinterpret_cast<MindVisionCameraServer *>(ptr)->mcpEmergencyStopStageJson();
+    });
 }

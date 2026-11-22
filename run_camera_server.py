@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Headless network server for the MindVision microscope camera.
+"""Headless network server for the MindVision microscope camera and CNC stage.
 
 Collects image frames from the MindVision camera (or synthetic test generator)
 on a headless host, streams compressed JPEG or uncompressed RGB888 frames over
-TCP, and accepts remote control commands (exposure, gain, auto-exposure, ROI,
-triggers, strobe, and server-side video recording).
+TCP, accepts remote control commands (exposure, gain, auto-exposure, ROI,
+triggers, strobe, stage serial, and server-side video recording), and exposes
+the local hardware MCP server.
 """
 
 from __future__ import annotations
@@ -41,10 +42,12 @@ def _configure_native_module_path() -> None:
 
 _configure_native_module_path()
 
+from microscope_mcp import QtMicroscopeBridge, start_local_mcp_server
+
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the headless MindVision camera TCP server."
+        description="Run the headless MindVision camera & stage TCP server with hardware MCP."
     )
     parser.add_argument(
         "-b",
@@ -103,6 +106,22 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         default=int(os.environ.get("MICROSCOPE_STAGE_BAUD", "115200")),
         help="Baud rate for the CNC stage serial port (default: 115200).",
     )
+    parser.add_argument(
+        "--mcp-port",
+        type=int,
+        default=None,
+        help="Port for the hardware MCP Streamable HTTP server (default: MICROSCOPE_MCP_PORT or 8765).",
+    )
+    parser.add_argument(
+        "--mcp-bind",
+        default=None,
+        help="Bind address for the hardware MCP server (default: MICROSCOPE_MCP_BIND or 127.0.0.1).",
+    )
+    parser.add_argument(
+        "--no-mcp",
+        action="store_true",
+        help="Disable the embedded hardware MCP server.",
+    )
     return parser.parse_args(argv)
 
 
@@ -140,9 +159,20 @@ def main(argv: list[str] | None = None) -> int:
     if not server_ptr:
         return 1
 
+    mcp_bridge = QtMicroscopeBridge(native, int(server_ptr), target_kind="camera_server")
+    app.aboutToQuit.connect(mcp_bridge.close)
+    start_local_mcp_server(
+        mcp_bridge,
+        mode="hardware",
+        port=args.mcp_port,
+        host=args.mcp_bind,
+        enabled=False if args.no_mcp else None,
+    )
+
     try:
         return app.exec()
     finally:
+        mcp_bridge.close()
         native.delete_camera_server_ptr(server_ptr)
 
 

@@ -23,11 +23,34 @@
 #include <QThread>
 #include <QTimer>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace {
 // Maximum queued bytes per client socket before dropping preview frames for that client
 constexpr qint64 kMaxPendingSocketBytes = 2 * 1024 * 1024;
+constexpr double kMinimumExposureMs = 0.001;
+
+std::string mcpJsonResult(bool ok, const QString &message,
+                          const QJsonObject &extra = QJsonObject())
+{
+    QJsonObject obj = extra;
+    obj["ok"] = ok;
+    obj["message"] = message;
+    return QJsonDocument(obj).toJson(QJsonDocument::Compact).toStdString();
+}
+
+QString normalizeStageRx(const QString &content)
+{
+    QString result;
+    result.reserve(content.size());
+    for (const QChar &ch : content) {
+        if (ch >= ' ' && ch <= '~') {
+            result.append(ch);
+        }
+    }
+    return result.trimmed();
+}
 } // namespace
 
 // =============================================================================
@@ -150,6 +173,7 @@ public:
           m_videoThread(new VideoThread(this)),
           m_tcpServer(new QTcpServer(this)),
           m_telemetryTimer(new QTimer(this)),
+          m_stagePollTimer(new QTimer(this)),
           m_encoderThread(new QThread(this)),
           m_encoder(new ServerFrameEncoder())
     {
@@ -182,6 +206,9 @@ public:
         connect(m_telemetryTimer, &QTimer::timeout,
                 this, &MindVisionCameraServerPrivate::updateCachedTelemetry);
         m_telemetryTimer->start(200);
+
+        connect(m_stagePollTimer, &QTimer::timeout,
+                this, &MindVisionCameraServerPrivate::pollStageStatus);
     }
 
     ~MindVisionCameraServerPrivate() override
@@ -245,6 +272,13 @@ public:
         st["connected"] = isStageConnected();
         st["port_name"] = m_stagePortName;
         st["baud_rate"] = m_stageBaudRate;
+        st["state"] = isStageConnected() ? m_stageState : QStringLiteral("Disconnected");
+        st["has_position"] = m_hasStagePosition;
+        st["position_mm"] = QJsonObject{
+            {"x", m_stageX},
+            {"y", m_stageY},
+            {"z", m_stageZ}
+        };
         QJsonArray portsArr;
         for (const QString &p : availableStagePorts()) {
             portsArr.append(p);
@@ -318,8 +352,69 @@ public:
         }
     }
 
+    void observeStageRxLine(const QString &rxContent)
+    {
+        const QString normalized = normalizeStageRx(rxContent);
+        if (normalized.isEmpty()) {
+            return;
+        }
+        if (normalized.startsWith('<') && normalized.endsWith('>')) {
+            const QString inner = normalized.mid(1, normalized.size() - 2);
+            const QStringList parts = inner.split('|');
+            if (!parts.isEmpty() && !parts[0].isEmpty()) {
+                m_stageState = parts[0];
+            }
+            static const QRegularExpression posRe(
+                QStringLiteral("(?:WPos|MPos):(-?[\\d\\.]+),(-?[\\d\\.]+),(-?[\\d\\.]+)"));
+            const auto match = posRe.match(inner);
+            if (match.hasMatch()) {
+                m_stageX = match.captured(1).toDouble();
+                m_stageY = match.captured(2).toDouble();
+                m_stageZ = match.captured(3).toDouble();
+                m_hasStagePosition = true;
+            }
+            return;
+        }
+
+        const QString lowered = normalized.toLower();
+        static const QRegularExpression okRe(QStringLiteral("(^|[^a-z])ok([^a-z]|$)"));
+        if (okRe.match(lowered).hasMatch() || lowered.contains(QStringLiteral("error"))) {
+            if (m_mcpStageWaitingForOk) {
+                m_mcpStageWaitingForOk = false;
+                pumpMcpStageQueue();
+            }
+        }
+    }
+
+    void enqueueMcpStageCommand(const QString &cmd)
+    {
+        m_mcpStageQueue.append(cmd);
+        pumpMcpStageQueue();
+    }
+
+    void pumpMcpStageQueue()
+    {
+        if (m_pumpingMcpStageQueue) {
+            return;
+        }
+        m_pumpingMcpStageQueue = true;
+        while (!m_mcpStageWaitingForOk && !m_mcpStageQueue.isEmpty()) {
+            const QString cmd = m_mcpStageQueue.takeFirst();
+            m_mcpStageWaitingForOk = true;
+            if (!sendStageCommand(cmd)) {
+                m_mcpStageWaitingForOk = false;
+                m_mcpStageQueue.clear();
+                break;
+            }
+        }
+        m_pumpingMcpStageQueue = false;
+    }
+
     void emitAndBroadcastStageLog(const QString &msg)
     {
+        if (msg.startsWith(QStringLiteral("Rx: "))) {
+            observeStageRxLine(msg.mid(4));
+        }
         emit q->stageLogMessage(msg);
         QJsonObject ev;
         ev["event"] = "stage_log";
@@ -376,6 +471,11 @@ public:
             m_stageBaudRate = baudRate > 0 ? baudRate : 115200;
             m_synStageRelative = false;
             m_synStageState = QStringLiteral("Idle");
+            m_stageState = QStringLiteral("Idle");
+            m_stageX = m_synStageX;
+            m_stageY = m_synStageY;
+            m_stageZ = m_synStageZ;
+            m_hasStagePosition = true;
             emit q->logMessage(QString("Stage connected to SYNTHETIC_STAGE (%1 baud)").arg(m_stageBaudRate));
             emitAndBroadcastStageLog(
                 QString("Connected to %1 at %2 baud.").arg(m_stagePortName).arg(m_stageBaudRate));
@@ -405,23 +505,32 @@ public:
         m_stagePortName = portName;
         m_stageBaudRate = baudRate > 0 ? baudRate : 115200;
         m_stageReadBuffer.clear();
+        m_stageState = QStringLiteral("Unknown");
+        m_hasStagePosition = false;
+        m_stagePollTimer->start(250);
         emit q->logMessage(QString("Stage serial connected: %1 @ %2 baud")
                                .arg(m_stagePortName)
                                .arg(m_stageBaudRate));
         emitAndBroadcastStageLog(
             QString("Connected to %1 at %2 baud.").arg(m_stagePortName).arg(m_stageBaudRate));
         emitAndBroadcastStageStatus();
+        sendStageRawCommand(QByteArrayLiteral("?"));
         return true;
     }
 
     void disconnectStage()
     {
         const bool wasConnected = isStageConnected();
+        m_stagePollTimer->stop();
+        m_mcpStageQueue.clear();
+        m_mcpStageWaitingForOk = false;
         if (m_stageSerial.isOpen()) {
             m_stageSerial.close();
         }
         m_stageSyntheticConnected = false;
         m_stageReadBuffer.clear();
+        m_stageState = QStringLiteral("Disconnected");
+        m_hasStagePosition = false;
         if (wasConnected) {
             emit q->logMessage(QString("Stage serial disconnected (%1).").arg(m_stagePortName));
             emitAndBroadcastStageLog(QStringLiteral("Disconnected from serial port."));
@@ -622,6 +731,30 @@ public slots:
         m_cachedExposureMs = m_camera->getExposureTime();
         m_cachedAnalogGain = m_camera->getAnalogGain();
         m_cachedAeTarget = m_camera->getAeTarget();
+    }
+
+    void pollStageStatus()
+    {
+        if (!m_stageSerial.isOpen()) {
+            return;
+        }
+        // When a remote GUI CNCControlPanel client is subscribed, it already polls '?'.
+        for (const ClientSession *c : std::as_const(m_clients)) {
+            if (c->stageSubscribed &&
+                c->socket &&
+                c->socket->state() == QAbstractSocket::ConnectedState) {
+                return;
+            }
+        }
+        sendStageRawCommand(QByteArrayLiteral("?"));
+    }
+
+    void broadcastCameraStats()
+    {
+        updateCachedTelemetry();
+        QJsonObject ev = buildCameraStateJson();
+        ev["event"] = "stats";
+        broadcastJsonEvent(ev);
     }
 
     void onNewConnection()
@@ -926,6 +1059,7 @@ public slots:
             return;
         }
 
+        m_latestFrame = image;
         m_lastFrameWidth = image.width();
         m_lastFrameHeight = image.height();
 
@@ -1008,6 +1142,7 @@ public:
     VideoThread *m_videoThread;
     QTcpServer *m_tcpServer;
     QTimer *m_telemetryTimer;
+    QTimer *m_stagePollTimer;
     QThread *m_encoderThread;
     ServerFrameEncoder *m_encoder;
 
@@ -1019,6 +1154,7 @@ public:
     QString m_lastRecordingFile;
     bool m_keepCameraOpen = false;
 
+    QImage m_latestFrame;
     int m_lastFrameWidth = 0;
     int m_lastFrameHeight = 0;
     double m_lastFps = 0.0;
@@ -1033,6 +1169,14 @@ public:
     QByteArray m_stageReadBuffer;
     QString m_stagePortName;
     int m_stageBaudRate = 115200;
+    QString m_stageState = QStringLiteral("Disconnected");
+    double m_stageX = 0.0;
+    double m_stageY = 0.0;
+    double m_stageZ = 0.0;
+    bool m_hasStagePosition = false;
+    QStringList m_mcpStageQueue;
+    bool m_mcpStageWaitingForOk = false;
+    bool m_pumpingMcpStageQueue = false;
     bool m_stageSyntheticConnected = false;
     bool m_synStageRelative = false;
     double m_synStageX = 0.0;
@@ -1167,6 +1311,7 @@ bool MindVisionCameraServer::openCamera()
 void MindVisionCameraServer::closeCamera()
 {
     d->m_camera->close();
+    d->m_latestFrame = QImage();
 }
 
 bool MindVisionCameraServer::startCapture()
@@ -1229,6 +1374,216 @@ bool MindVisionCameraServer::sendStageRawCommand(const QByteArray &rawCmd)
 MindVisionCamera *MindVisionCameraServer::camera() const
 {
     return d->m_camera;
+}
+
+// =============================================================================
+// Headless Hardware MCP Entry Points
+// =============================================================================
+
+std::string MindVisionCameraServer::mcpStatusJson() const
+{
+    d->updateCachedTelemetry();
+
+    QJsonObject result;
+    result["role"] = QStringLiteral("hardware");
+    result["camera_open"] = d->m_camera->isOpen();
+    result["camera_running"] = d->m_camera->isRunning();
+    result["synthetic_mode"] = d->m_camera->isSyntheticMode();
+    result["recording"] = d->m_videoThread->isRunning();
+    result["last_recording_file"] = d->m_lastRecordingFile;
+    result["fps"] = d->m_lastFps;
+    result["connected_clients"] = d->m_clients.size();
+    result["tcp_bind_address"] = d->m_bindAddress;
+    result["tcp_port"] = static_cast<int>(serverPort());
+
+    if (d->m_camera->isOpen()) {
+        result["auto_exposure"] = d->m_cachedAutoExposure;
+        result["exposure_ms"] = d->m_cachedExposureMs;
+        result["gain"] = d->m_cachedAnalogGain;
+    }
+    if (d->m_lastFrameWidth > 0 && d->m_lastFrameHeight > 0) {
+        result["width"] = d->m_lastFrameWidth;
+        result["height"] = d->m_lastFrameHeight;
+    }
+
+    result["stage_connected"] = d->isStageConnected();
+    result["stage_port"] = d->m_stagePortName;
+    QJsonArray portsArr;
+    for (const QString &p : d->availableStagePorts()) {
+        portsArr.append(p);
+    }
+    result["available_stage_ports"] = portsArr;
+    result["cnc_state"] = d->isStageConnected() ? d->m_stageState : QStringLiteral("Disconnected");
+    result["stage_position_mm"] = QJsonObject{
+        {"x", d->m_stageX},
+        {"y", d->m_stageY},
+        {"z", d->m_stageZ}
+    };
+    return mcpJsonResult(true, QStringLiteral("Microscope hardware status retrieved."), result);
+}
+
+std::string MindVisionCameraServer::mcpStartCameraJson()
+{
+    if (!d->m_camera->isRunning()) {
+        startCapture();
+    }
+    const bool running = d->m_camera->isRunning();
+    if (running) {
+        d->broadcastCameraStats();
+    }
+    return mcpJsonResult(running,
+                         running ? QStringLiteral("Camera is running.")
+                                 : QStringLiteral("Camera could not be started."));
+}
+
+std::string MindVisionCameraServer::mcpStopCameraJson()
+{
+    if (d->m_videoThread->isRunning()) {
+        d->m_videoThread->stopRecording();
+    }
+    if (d->m_camera->isRunning()) {
+        stopCapture();
+    }
+    d->broadcastCameraStats();
+    return mcpJsonResult(true, QStringLiteral("Camera is stopped."));
+}
+
+std::string MindVisionCameraServer::mcpSnapshotJson()
+{
+    if (d->m_latestFrame.isNull()) {
+        return mcpJsonResult(false, QStringLiteral("No camera frame is available. Start the camera and wait for a frame."));
+    }
+
+    QDir snapDir(QStringLiteral("snapshots"));
+    snapDir.mkpath(QStringLiteral("."));
+    const QString filename = snapDir.filePath(
+        QString("snapshot_%1.png").arg(QDateTime::currentMSecsSinceEpoch()));
+    if (!d->m_latestFrame.save(filename)) {
+        return mcpJsonResult(false, QStringLiteral("Could not save the snapshot."));
+    }
+    const QString absPath = QFileInfo(filename).absoluteFilePath();
+    emit logMessage(QString("MCP snapshot saved: %1").arg(absPath));
+    return mcpJsonResult(true, QStringLiteral("Snapshot saved."), QJsonObject{{"path", absPath}});
+}
+
+std::string MindVisionCameraServer::mcpSetRecordingJson(bool enabled)
+{
+    if (enabled && !d->m_camera->isRunning()) {
+        return mcpJsonResult(false, QStringLiteral("Start the camera before starting recording."));
+    }
+
+    if (enabled) {
+        if (!d->m_videoThread->isRunning()) {
+            const int width = d->m_lastFrameWidth > 0 ? d->m_lastFrameWidth : 1280;
+            const int height = d->m_lastFrameHeight > 0 ? d->m_lastFrameHeight : 1024;
+            const double fps = d->m_lastFps > 0.1 ? d->m_lastFps : 30.0;
+            QDir dir(d->m_recordingDir);
+            dir.mkpath(QStringLiteral("."));
+            const QString filename = dir.filePath(
+                QString("recording_%1.mkv").arg(QDateTime::currentSecsSinceEpoch()));
+            d->m_videoThread->startRecording(width, height, fps, filename);
+            d->m_lastRecordingFile = QFileInfo(filename).absoluteFilePath();
+            emit logMessage(QString("MCP recording started: %1").arg(d->m_lastRecordingFile));
+            d->broadcastCameraStats();
+        }
+        return mcpJsonResult(true, QStringLiteral("Recording started."),
+                             QJsonObject{{"path", d->m_lastRecordingFile}});
+    }
+
+    if (d->m_videoThread->isRunning()) {
+        d->m_videoThread->stopRecording();
+        emit logMessage(QString("MCP recording stopped: %1").arg(d->m_lastRecordingFile));
+        d->broadcastCameraStats();
+    }
+    return mcpJsonResult(true, QStringLiteral("Recording stopped."),
+                         QJsonObject{{"path", d->m_lastRecordingFile}});
+}
+
+std::string MindVisionCameraServer::mcpSetExposureJson(double milliseconds)
+{
+    if (!std::isfinite(milliseconds) || milliseconds < kMinimumExposureMs || milliseconds > 10000.0) {
+        return mcpJsonResult(false, QStringLiteral("Exposure must be between 0.001 and 10000 milliseconds."));
+    }
+    if (!d->m_camera->isOpen() && !openCamera()) {
+        return mcpJsonResult(false, QStringLiteral("Camera is not open and could not be opened."));
+    }
+    const bool ok = d->m_camera->setExposureTime(milliseconds);
+    d->broadcastCameraStats();
+    return mcpJsonResult(ok,
+                         ok ? QStringLiteral("Exposure updated.")
+                            : QStringLiteral("Failed to update exposure."),
+                         QJsonObject{{"exposure_ms", d->m_cachedExposureMs}});
+}
+
+std::string MindVisionCameraServer::mcpSetGainJson(int gain)
+{
+    if (!d->m_camera->isOpen() && !openCamera()) {
+        return mcpJsonResult(false, QStringLiteral("Camera is not open and could not be opened."));
+    }
+    int minGain = 1;
+    int maxGain = 100;
+    d->m_camera->getAnalogGainRange(minGain, maxGain);
+    if (minGain >= maxGain) {
+        minGain = 1;
+        maxGain = 100;
+    }
+    if (gain < minGain || gain > maxGain) {
+        return mcpJsonResult(false, QString("Gain must be between %1 and %2.").arg(minGain).arg(maxGain));
+    }
+    const bool ok = d->m_camera->setAnalogGain(gain);
+    d->broadcastCameraStats();
+    return mcpJsonResult(ok,
+                         ok ? QStringLiteral("Gain updated.")
+                            : QStringLiteral("Failed to update gain."),
+                         QJsonObject{{"gain", d->m_cachedAnalogGain}});
+}
+
+std::string MindVisionCameraServer::mcpSetAutoExposureJson(bool enabled)
+{
+    if (!d->m_camera->isOpen() && !openCamera()) {
+        return mcpJsonResult(false, QStringLiteral("Camera is not open and could not be opened."));
+    }
+    const bool ok = d->m_camera->setAutoExposure(enabled);
+    d->broadcastCameraStats();
+    return mcpJsonResult(ok,
+                         ok ? (enabled ? QStringLiteral("Auto exposure enabled.")
+                                       : QStringLiteral("Auto exposure disabled."))
+                            : QStringLiteral("Failed to update auto exposure."));
+}
+
+std::string MindVisionCameraServer::mcpMoveStageJson(double xMm, double yMm, int feedrate)
+{
+    if (!std::isfinite(xMm) || !std::isfinite(yMm) || feedrate < 1 || feedrate > 5000) {
+        return mcpJsonResult(false, QStringLiteral("Stage coordinates must be finite and feedrate must be 1 to 5000 mm/min."));
+    }
+    if (!d->isStageConnected()) {
+        QString err;
+        if (!d->connectStage(QString(), d->m_stageBaudRate, &err)) {
+            return mcpJsonResult(false, err.isEmpty() ? QStringLiteral("Stage is not connected.") : err);
+        }
+    }
+    d->enqueueMcpStageCommand(QStringLiteral("G90"));
+    d->enqueueMcpStageCommand(
+        QString("G1 X%1 Y%2 F%3").arg(xMm, 0, 'f', 3).arg(yMm, 0, 'f', 3).arg(feedrate));
+    emit logMessage(QString("MCP stage move requested: X%1 Y%2 F%3").arg(xMm).arg(yMm).arg(feedrate));
+    return mcpJsonResult(true, QStringLiteral("Stage move queued."),
+                         QJsonObject{{"target_mm", QJsonObject{{"x", xMm}, {"y", yMm}}},
+                                     {"feedrate_mm_min", feedrate}});
+}
+
+std::string MindVisionCameraServer::mcpEmergencyStopStageJson()
+{
+    d->m_mcpStageQueue.clear();
+    d->m_mcpStageWaitingForOk = false;
+    if (!d->isStageConnected()) {
+        return mcpJsonResult(false, QStringLiteral("Stage is not connected."));
+    }
+    QString err;
+    const bool ok = d->sendStageRawCommand(QByteArrayLiteral("!"), &err);
+    emit logMessage(QStringLiteral("MCP emergency stop requested."));
+    return mcpJsonResult(ok,
+                         ok ? QStringLiteral("Stage stop requested.")
+                            : (err.isEmpty() ? QStringLiteral("Failed to request stage stop.") : err));
 }
 
 #include "MindVisionCameraServer.moc"
