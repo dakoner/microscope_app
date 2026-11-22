@@ -5,12 +5,31 @@
 #include <cstdio>
 #include <cstring>
 
+#ifdef _WIN32
+// MSVC spells the process-pipe helpers with a leading underscore.
+#define popen _popen
+#define pclose _pclose
+#endif
+
 namespace {
 
 // Shell-quote a filename so it is safe to embed in a popen() command string.
-// Uses POSIX single-quote escaping: 'text' with any ' replaced by '\''
 QByteArray shellQuote(const QString &s)
 {
+#ifdef _WIN32
+    // _popen() runs the command through cmd.exe, which uses double quotes.
+    QByteArray quoted = "\"";
+    for (const QChar c : s) {
+        if (c == QLatin1Char('"')) {
+            quoted += "\\\"";
+        } else {
+            quoted += c.toLatin1();
+        }
+    }
+    quoted += "\"";
+    return quoted;
+#else
+    // POSIX single-quote escaping: 'text' with any ' replaced by '\''
     QByteArray quoted = "'";
     for (const QChar c : s) {
         if (c == QLatin1Char('\'')) {
@@ -21,6 +40,7 @@ QByteArray shellQuote(const QString &s)
     }
     quoted += "'";
     return quoted;
+#endif
 }
 
 } // namespace

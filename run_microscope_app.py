@@ -17,9 +17,18 @@ def _configure_qt_runtime_from_pyside6() -> None:
     pyside_root = Path(PySide6.__file__).resolve().parent
     qt_root = pyside_root / "Qt"
     plugins_dir = qt_root / "plugins"
+    if not plugins_dir.is_dir():
+        # Windows wheels keep the Qt runtime directly inside the package.
+        plugins_dir = pyside_root / "plugins"
 
     if plugins_dir.is_dir():
         os.environ.setdefault("QT_PLUGIN_PATH", str(plugins_dir))
+
+    if sys.platform.startswith("win"):
+        # Make the Qt DLLs importable by the native C++ extension module.
+        for dll_dir in (qt_root / "bin", pyside_root):
+            if dll_dir.is_dir():
+                os.add_dll_directory(str(dll_dir))
 
 
 _configure_qt_runtime_from_pyside6()
@@ -38,6 +47,16 @@ def _configure_native_module_path() -> None:
     release_dir = Path(__file__).resolve().parent / "release"
     if release_dir.is_dir():
         sys.path.insert(0, str(release_dir))
+        if sys.platform.startswith("win"):
+            # Native DLLs shipped next to the extension module.
+            os.add_dll_directory(str(release_dir))
+
+    if sys.platform.startswith("win"):
+        # The TensorRT DLLs are hundreds of MB, so they stay in the unpacked
+        # NVIDIA zip under third_party/ and are added to the DLL search path.
+        third_party = Path(__file__).resolve().parent / "third_party"
+        for trt_lib in sorted(third_party.glob("TensorRT-*/lib")):
+            os.add_dll_directory(str(trt_lib))
 
 
 _configure_native_module_path()
