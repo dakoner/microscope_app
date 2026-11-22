@@ -8,6 +8,18 @@
 
 //相机的句柄类型定义
 typedef int CameraHandle;
+
+#ifdef _WIN32
+// On Windows the SDK types come from the Windows SDK headers; the private
+// typedefs below only exist for platforms without windows.h (the Linux SDK).
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 typedef int INT;
 typedef int LONG;
 typedef unsigned int UINT;
@@ -30,6 +42,7 @@ typedef unsigned int ULONG;
 typedef void* LPVOID;
 typedef unsigned char UCHAR;
 typedef void* HMODULE;
+#endif
 
 #define TRUE 1
 #define FALSE 0
