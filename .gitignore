@@ -8,3 +8,12 @@ models
 __pycache__
 src/microscope_app.egg-info/
 camera_settings.json
+
+# Windows build (CMake + Ninja)
+build/
+.venv/
+build_win.log
+third_party_deps.log
+# Downloaded/installed native dependencies; the CMake wrapper is project source.
+third_party/*
+!third_party/qscintilla_cmake/
