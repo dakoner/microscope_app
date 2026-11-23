@@ -400,6 +400,8 @@ signals:
     void queueStatsChanged(qulonglong queueSize, qulonglong droppedFrames);
     void fpsChanged(double fps);
     void errorOccurred(QString message);
+    // An action performed on the shared hardware through the server's MCP bridge.
+    void mcpAction(QString kind, QString message);
 
 private slots:
     void onReadyRead();
@@ -758,6 +760,9 @@ void RemoteCameraClientWorker::handleJsonPayload(const QByteArray &payload)
         emit queueStatsChanged(qSize, dropped);
     } else if (eventType == "error") {
         emit errorOccurred(obj.value("message").toString("Remote camera error"));
+    } else if (eventType == "mcp_action") {
+        emit mcpAction(obj.value("kind").toString(),
+                       obj.value("message").toString("Remote MCP action"));
     }
 }
 
@@ -920,6 +925,8 @@ public:
                          owner, &MindVisionCamera::fpsChanged);
         QObject::connect(m_remoteWorker, &RemoteCameraClientWorker::errorOccurred,
                          owner, &MindVisionCamera::errorOccurred);
+        QObject::connect(m_remoteWorker, &RemoteCameraClientWorker::mcpAction,
+                         owner, &MindVisionCamera::mcpAction);
 
         m_remoteThread->start();
     }
@@ -1109,6 +1116,15 @@ bool MindVisionCamera::isRunning() const
         return d->m_remoteWorker && d->m_remoteWorker->cachedState().isRunning;
     }
     return d->m_workerThread != nullptr;
+}
+
+bool MindVisionCamera::isConnected() const
+{
+    if (d->m_remoteMode) {
+        return d->m_remoteWorker && d->m_remoteWorker->cachedState().connected;
+    }
+    // Local cameras have no link to report.
+    return true;
 }
 
 bool MindVisionCamera::open()

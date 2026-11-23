@@ -200,6 +200,15 @@ void SerialWorker::dispatchRemoteEvents()
                 m_remoteStageConnected = connected;
                 emitStatus(connected);
             }
+        } else if (evType == QStringLiteral("mcp_action")) {
+            // Only stage actions belong in the CNC log window; camera actions are
+            // reported by the camera client.
+            if (ev.value(QStringLiteral("kind")).toString() == QStringLiteral("stage")) {
+                const QString msg = ev.value(QStringLiteral("message")).toString();
+                if (!msg.isEmpty()) {
+                    emitLog(QStringLiteral("[MCP] ") + msg);
+                }
+            }
         }
     }
 }

@@ -757,6 +757,21 @@ public slots:
         broadcastJsonEvent(ev);
     }
 
+    // Log an action taken through the hardware MCP bridge and forward it to every
+    // connected client, so a GUI can show what automation is doing to the hardware.
+    // "kind" groups the action ("camera", "recording", "snapshot", "stage") so each
+    // client can decide whether the message belongs in its own view.
+    void broadcastMcpAction(const QString &kind, const QString &message)
+    {
+        emit q->logMessage(QStringLiteral("MCP: ") + message);
+
+        QJsonObject ev;
+        ev["event"] = QStringLiteral("mcp_action");
+        ev["kind"] = kind;
+        ev["message"] = message;
+        broadcastJsonEvent(ev);
+    }
+
     void onNewConnection()
     {
         while (QTcpSocket *sock = m_tcpServer->nextPendingConnection()) {
@@ -1424,12 +1439,16 @@ std::string MindVisionCameraServer::mcpStatusJson() const
 
 std::string MindVisionCameraServer::mcpStartCameraJson()
 {
-    if (!d->m_camera->isRunning()) {
+    const bool wasRunning = d->m_camera->isRunning();
+    if (!wasRunning) {
         startCapture();
     }
     const bool running = d->m_camera->isRunning();
     if (running) {
         d->broadcastCameraStats();
+        if (!wasRunning) {
+            d->broadcastMcpAction(QStringLiteral("camera"), QStringLiteral("camera started"));
+        }
     }
     return mcpJsonResult(running,
                          running ? QStringLiteral("Camera is running.")
@@ -1440,9 +1459,11 @@ std::string MindVisionCameraServer::mcpStopCameraJson()
 {
     if (d->m_videoThread->isRunning()) {
         d->m_videoThread->stopRecording();
+        d->broadcastMcpAction(QStringLiteral("recording"), QStringLiteral("recording stopped"));
     }
     if (d->m_camera->isRunning()) {
         stopCapture();
+        d->broadcastMcpAction(QStringLiteral("camera"), QStringLiteral("camera stopped"));
     }
     d->broadcastCameraStats();
     return mcpJsonResult(true, QStringLiteral("Camera is stopped."));
@@ -1462,7 +1483,7 @@ std::string MindVisionCameraServer::mcpSnapshotJson()
         return mcpJsonResult(false, QStringLiteral("Could not save the snapshot."));
     }
     const QString absPath = QFileInfo(filename).absoluteFilePath();
-    emit logMessage(QString("MCP snapshot saved: %1").arg(absPath));
+    d->broadcastMcpAction(QStringLiteral("snapshot"), QString("snapshot saved: %1").arg(absPath));
     return mcpJsonResult(true, QStringLiteral("Snapshot saved."), QJsonObject{{"path", absPath}});
 }
 
@@ -1483,8 +1504,9 @@ std::string MindVisionCameraServer::mcpSetRecordingJson(bool enabled)
                 QString("recording_%1.mkv").arg(QDateTime::currentSecsSinceEpoch()));
             d->m_videoThread->startRecording(width, height, fps, filename);
             d->m_lastRecordingFile = QFileInfo(filename).absoluteFilePath();
-            emit logMessage(QString("MCP recording started: %1").arg(d->m_lastRecordingFile));
             d->broadcastCameraStats();
+            d->broadcastMcpAction(QStringLiteral("recording"),
+                                  QString("recording started: %1").arg(d->m_lastRecordingFile));
         }
         return mcpJsonResult(true, QStringLiteral("Recording started."),
                              QJsonObject{{"path", d->m_lastRecordingFile}});
@@ -1492,8 +1514,9 @@ std::string MindVisionCameraServer::mcpSetRecordingJson(bool enabled)
 
     if (d->m_videoThread->isRunning()) {
         d->m_videoThread->stopRecording();
-        emit logMessage(QString("MCP recording stopped: %1").arg(d->m_lastRecordingFile));
         d->broadcastCameraStats();
+        d->broadcastMcpAction(QStringLiteral("recording"),
+                              QString("recording stopped: %1").arg(d->m_lastRecordingFile));
     }
     return mcpJsonResult(true, QStringLiteral("Recording stopped."),
                          QJsonObject{{"path", d->m_lastRecordingFile}});
@@ -1509,6 +1532,10 @@ std::string MindVisionCameraServer::mcpSetExposureJson(double milliseconds)
     }
     const bool ok = d->m_camera->setExposureTime(milliseconds);
     d->broadcastCameraStats();
+    if (ok) {
+        d->broadcastMcpAction(QStringLiteral("camera"),
+                              QString("exposure set to %1 ms").arg(d->m_cachedExposureMs, 0, 'f', 3));
+    }
     return mcpJsonResult(ok,
                          ok ? QStringLiteral("Exposure updated.")
                             : QStringLiteral("Failed to update exposure."),
@@ -1532,6 +1559,10 @@ std::string MindVisionCameraServer::mcpSetGainJson(int gain)
     }
     const bool ok = d->m_camera->setAnalogGain(gain);
     d->broadcastCameraStats();
+    if (ok) {
+        d->broadcastMcpAction(QStringLiteral("camera"),
+                              QString("gain set to %1").arg(d->m_cachedAnalogGain));
+    }
     return mcpJsonResult(ok,
                          ok ? QStringLiteral("Gain updated.")
                             : QStringLiteral("Failed to update gain."),
@@ -1545,6 +1576,11 @@ std::string MindVisionCameraServer::mcpSetAutoExposureJson(bool enabled)
     }
     const bool ok = d->m_camera->setAutoExposure(enabled);
     d->broadcastCameraStats();
+    if (ok) {
+        d->broadcastMcpAction(QStringLiteral("camera"),
+                              enabled ? QStringLiteral("auto exposure enabled")
+                                      : QStringLiteral("auto exposure disabled"));
+    }
     return mcpJsonResult(ok,
                          ok ? (enabled ? QStringLiteral("Auto exposure enabled.")
                                        : QStringLiteral("Auto exposure disabled."))
@@ -1565,7 +1601,9 @@ std::string MindVisionCameraServer::mcpMoveStageJson(double xMm, double yMm, int
     d->enqueueMcpStageCommand(QStringLiteral("G90"));
     d->enqueueMcpStageCommand(
         QString("G1 X%1 Y%2 F%3").arg(xMm, 0, 'f', 3).arg(yMm, 0, 'f', 3).arg(feedrate));
-    emit logMessage(QString("MCP stage move requested: X%1 Y%2 F%3").arg(xMm).arg(yMm).arg(feedrate));
+    d->broadcastMcpAction(QStringLiteral("stage"),
+                          QString("move queued: X=%1 Y=%2 mm at %3 mm/min")
+                              .arg(xMm, 0, 'f', 3).arg(yMm, 0, 'f', 3).arg(feedrate));
     return mcpJsonResult(true, QStringLiteral("Stage move queued."),
                          QJsonObject{{"target_mm", QJsonObject{{"x", xMm}, {"y", yMm}}},
                                      {"feedrate_mm_min", feedrate}});
@@ -1580,7 +1618,7 @@ std::string MindVisionCameraServer::mcpEmergencyStopStageJson()
     }
     QString err;
     const bool ok = d->sendStageRawCommand(QByteArrayLiteral("!"), &err);
-    emit logMessage(QStringLiteral("MCP emergency stop requested."));
+    d->broadcastMcpAction(QStringLiteral("stage"), QStringLiteral("emergency stop (feed hold)"));
     return mcpJsonResult(ok,
                          ok ? QStringLiteral("Stage stop requested.")
                             : (err.isEmpty() ? QStringLiteral("Failed to request stage stop.") : err));

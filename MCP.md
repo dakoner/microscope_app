@@ -45,6 +45,35 @@ Stage motion requires `confirm=true`; an AI should set that only after the user
 has explicitly confirmed the requested destination. No unrestricted G-code
 execution is exposed.
 
+Note that `stop_camera` stops capture for the whole server: unlike the TCP `stop`
+command it does not check whether other clients are still streaming and it ignores
+`--keep-open`. Treat `move_stage` and `emergency_stop_stage` as off-limits while
+the GUI reports `scanning: true`, since MCP moves and the GUI's scan G-code share
+one FluidNC link.
+
+## Watching automation happen
+
+Every action taken through the hardware MCP bridge is written to the server
+console (`MCP: …`) and broadcast to all connected TCP clients as an
+`mcp_action` event:
+
+```json
+{ "event": "mcp_action", "kind": "camera", "message": "exposure set to 5.000 ms" }
+```
+
+`kind` is one of `camera`, `recording`, `snapshot` or `stage`. The GUI repeats
+these lines with a `[MCP]` prefix — camera, recording and snapshot actions in the
+main activity log, stage actions in the CNC panel's log window — and re-syncs the
+exposure, gain and auto-exposure widgets from the server's `stats` events, so
+changes made by an automation client are visible while it works.
+
+`get_microscope_status` reports `connected_clients`, which counts TCP clients
+only: MCP calls run in-process on the server, so an MCP client never appears
+there and never receives frames. `get_app_status` reports `camera_running` and
+`camera_connected` from the state the server last reported rather than from the
+GUI's own start/stop flag, so a camera started or stopped by automation (or a
+dropped link) shows up there.
+
 ## Configuration
 
 CLI flags (supported by both `run_camera_server.py` and `run_microscope_app.py`):

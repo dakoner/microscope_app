@@ -221,6 +221,7 @@ def _register_app_tools(server: Any, bridge: QtMicroscopeBridge, *, include_app_
                 "remote_camera_port",
                 "remote_jpeg_quality",
                 "camera_running",
+                "camera_connected",
                 "recording",
                 "remote_recording",
                 "scanning",

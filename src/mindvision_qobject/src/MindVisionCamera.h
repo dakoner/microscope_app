@@ -62,6 +62,8 @@ public:
     // State query helpers
     Q_INVOKABLE bool isOpen() const;
     Q_INVOKABLE bool isRunning() const;
+    // In remote mode this reports whether the TCP link to the camera server is up.
+    Q_INVOKABLE bool isConnected() const;
 
     // Settings
     Q_INVOKABLE bool setAutoExposure(bool enabled);
@@ -123,6 +125,9 @@ signals:
     void fpsChanged(double fps);
     // Signal for error reporting
     void errorOccurred(QString message);
+    // An action performed on the shared hardware through the camera server's MCP
+    // bridge.  "kind" is "camera", "recording", "snapshot" or "stage".
+    void mcpAction(QString kind, QString message);
 
 private slots:
     void deliverLatestFrame();

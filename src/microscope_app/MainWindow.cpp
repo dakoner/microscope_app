@@ -710,6 +710,15 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_camera, &MindVisionCamera::fpsChanged, this, &MainWindow::updateFps);
     connect(m_camera, &MindVisionCamera::errorOccurred, this, &MainWindow::handleError);
+    // Surface actions taken on the shared hardware by an MCP client (stage actions
+    // are shown in the CNC panel's own log instead).
+    connect(m_camera, &MindVisionCamera::mcpAction, this,
+            [this](const QString &kind, const QString &message) {
+                if (kind == QLatin1String("stage") || message.isEmpty()) {
+                    return;
+                }
+                log(QString("[MCP] %1").arg(message));
+            });
     m_videoThread = new VideoThread(this);
     m_scanVideoThread = new VideoThread(this);
 
@@ -1744,7 +1753,11 @@ void MainWindow::onHomeAndRunClicked()
 std::string MainWindow::mcpStatusJson() const
 {
     QJsonObject result;
-    result["camera_running"] = m_isCameraRunning;
+    // Report the camera's actual state rather than the GUI's own start/stop flag.
+    // In remote mode this is the state the server last reported, so a camera started
+    // or stopped by an MCP client shows up here.
+    result["camera_running"] = m_camera && m_camera->isRunning();
+    result["camera_connected"] = m_camera && m_camera->isConnected();
     result["camera_mode"] = (m_camera && m_camera->isRemoteMode()) ? "remote" : "local";
     if (m_camera && m_camera->isRemoteMode()) {
         result["remote_camera_host"] = m_camera->remoteHost();
@@ -2086,7 +2099,9 @@ void MainWindow::applyCameraSettings()
 
 void MainWindow::pollCameraParams()
 {
-    if (!m_isCameraRunning) return;
+    // Poll whenever the camera is live, including when only an MCP client has it
+    // running, so the panel keeps showing what the hardware is actually doing.
+    if (!m_isCameraRunning && !(m_camera && m_camera->isOpen())) return;
 
     double curExp = m_camera->getExposureTime();
     if (!m_sliderExposure->isSliderDown() && !m_spinExposureTime->hasFocus()) {
@@ -2108,6 +2123,30 @@ void MainWindow::pollCameraParams()
             m_sliderGain->setValue(curGain);
             m_sliderGain->blockSignals(false);
         }
+    }
+
+    // Auto exposure and the AE target are not covered above: if an MCP client flips
+    // them, the panel would otherwise keep showing the previous mode.
+    bool curAuto = m_camera->getAutoExposure();
+    if (m_chkAutoExposure->isChecked() != curAuto) {
+        m_chkAutoExposure->blockSignals(true);
+        m_chkAutoExposure->setChecked(curAuto);
+        m_chkAutoExposure->blockSignals(false);
+        m_spinExposureTime->setEnabled(!curAuto);
+        m_sliderExposure->setEnabled(!curAuto);
+        m_spinAeTarget->setEnabled(curAuto);
+        m_sliderAeTarget->setEnabled(curAuto);
+    }
+
+    int curAeTarget = m_camera->getAeTarget();
+    if (!m_sliderAeTarget->isSliderDown() && !m_spinAeTarget->hasFocus()
+        && m_spinAeTarget->value() != curAeTarget) {
+        m_spinAeTarget->blockSignals(true);
+        m_spinAeTarget->setValue(curAeTarget);
+        m_spinAeTarget->blockSignals(false);
+        m_sliderAeTarget->blockSignals(true);
+        m_sliderAeTarget->setValue(curAeTarget);
+        m_sliderAeTarget->blockSignals(false);
     }
 }
 
