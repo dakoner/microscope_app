@@ -181,7 +181,13 @@ void VideoThread::run()
         " " + shellQuote(filename) +
         " >" + shellQuote(logPath) + " 2>&1";
 
+#ifdef _WIN32
+    // Windows _popen() defaults to text mode, translating 0x0A pixel bytes into
+    // CRLF (0x0D 0x0A) and corrupting the rawvideo stream fed to ffmpeg.
+    FILE *const pipe = ::popen(cmd.constData(), "wb");
+#else
     FILE *const pipe = ::popen(cmd.constData(), "w");
+#endif
     if (!pipe) {
         qDebug() << "VideoThread: Failed to popen ffmpeg:" << ::strerror(errno);
         return;
