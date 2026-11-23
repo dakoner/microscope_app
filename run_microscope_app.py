@@ -70,6 +70,15 @@ except ModuleNotFoundError as exc:
         "The native microscope module has not been built. Run `make` first, "
         "then launch with `uv run run_microscope_app.py`."
     ) from exc
+except ImportError as exc:
+    # The extension links against one specific CPython and Qt runtime, so a
+    # virtual environment recreated with a different Python minor version (or a
+    # different PySide6) shows up as an opaque DLL load failure on Windows.
+    raise ImportError(
+        "The native microscope module was built against a different Python or "
+        r"Qt runtime. Rebuild it in this environment: `scripts\build_windows.ps1 "
+        "-WithYolo -Clean` on Windows, `make` elsewhere."
+    ) from exc
 
 from microscope_mcp import McpMode, QtMicroscopeBridge, start_local_mcp_server
 
