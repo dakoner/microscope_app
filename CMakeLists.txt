@@ -223,29 +223,40 @@ if(MICROSCOPE_ENABLE_YOLO)
         find_library(CUDA_CUDART_LIB cudart
             HINTS "${MICROSCOPE_PREFIX}/lib" NO_DEFAULT_PATH REQUIRED)
 
-        # TensorRT ships as an unpacked NVIDIA zip under third_party/.
+        # TensorRT ships as an unpacked NVIDIA zip under third_party/.  Only the
+        # extracted directory counts: the downloaded archive itself also starts
+        # with "TensorRT-", and picking it would break the lookups below.
         if(NOT MICROSCOPE_TENSORRT_DIR)
-            file(GLOB trt_candidates "${THIRD_PARTY_DIR}/TensorRT-*")
+            set(trt_candidates "")
+            file(GLOB trt_entries "${THIRD_PARTY_DIR}/TensorRT-*")
+            foreach(trt_entry IN LISTS trt_entries)
+                if(IS_DIRECTORY "${trt_entry}")
+                    list(APPEND trt_candidates "${trt_entry}")
+                endif()
+            endforeach()
             if(trt_candidates)
-                list(SORT trt_candidates ORDER DESCENDING)
+                list(SORT trt_candidates COMPARE NATURAL ORDER DESCENDING)
                 list(GET trt_candidates 0 MICROSCOPE_TENSORRT_DIR)
             endif()
         endif()
-        if(NOT MICROSCOPE_TENSORRT_DIR OR NOT EXISTS "${MICROSCOPE_TENSORRT_DIR}")
+        if(NOT MICROSCOPE_TENSORRT_DIR OR NOT IS_DIRECTORY "${MICROSCOPE_TENSORRT_DIR}")
             message(FATAL_ERROR
                 "TensorRT not found. Pass -DMICROSCOPE_TENSORRT_DIR=<path> or run "
                 "scripts/build_deps_windows.ps1 -TensorRtZip <nvidia zip>.")
         endif()
         find_path(TENSORRT_INCLUDE_DIR NvInferRuntime.h
             HINTS "${MICROSCOPE_TENSORRT_DIR}/include" NO_DEFAULT_PATH REQUIRED)
-        # TensorRT 10 names its import libraries nvinfer_10.lib, older 8.x/9.x
-        # builds use plain nvinfer.lib.
-        find_library(NVINFER_LIB NAMES nvinfer_10 nvinfer
+        # TensorRT names its import libraries after the major version:
+        # nvinfer_11.lib (11.x), nvinfer_10.lib (10.x), nvinfer.lib (8.x/9.x).
+        find_library(NVINFER_LIB NAMES nvinfer_11 nvinfer_10 nvinfer
             HINTS "${MICROSCOPE_TENSORRT_DIR}/lib" NO_DEFAULT_PATH REQUIRED)
-        find_library(NVINFER_PLUGIN_LIB NAMES nvinfer_plugin_10 nvinfer_plugin
+        find_library(NVINFER_PLUGIN_LIB NAMES nvinfer_plugin_11 nvinfer_plugin_10 nvinfer_plugin
             HINTS "${MICROSCOPE_TENSORRT_DIR}/lib" NO_DEFAULT_PATH REQUIRED)
 
-        file(GLOB MICROSCOPE_TRT_DLLS "${MICROSCOPE_TENSORRT_DIR}/lib/nvinfer*.dll")
+        # 11.x zips keep the DLLs in bin/, 10.x zips keep them in lib/.
+        file(GLOB MICROSCOPE_TRT_DLLS
+            "${MICROSCOPE_TENSORRT_DIR}/bin/nvinfer*.dll"
+            "${MICROSCOPE_TENSORRT_DIR}/lib/nvinfer*.dll")
         target_include_directories(_microscope_app_cpp PRIVATE
             "${TENSORRT_INCLUDE_DIR}" "${CUDA_CUDART_INCLUDE_DIR}")
         target_link_libraries(_microscope_app_cpp PRIVATE
@@ -282,7 +293,8 @@ if(WIN32)
         # Only CUDART is copied next to the module; the TensorRT DLLs are
         # hundreds of MB, so run_microscope_app.py adds their directory to the
         # DLL search path instead.
-        list(APPEND MICROSCOPE_RUNTIME_DLLS "${MICROSCOPE_PREFIX}/bin/cudart64_12.dll")
+        file(GLOB MICROSCOPE_CUDART_DLLS "${MICROSCOPE_PREFIX}/bin/cudart*.dll")
+        list(APPEND MICROSCOPE_RUNTIME_DLLS ${MICROSCOPE_CUDART_DLLS})
     endif()
     set(MVSDK_RUNTIME "")
     foreach(candidate IN LISTS MVSDK_RUNTIME_DLLS)

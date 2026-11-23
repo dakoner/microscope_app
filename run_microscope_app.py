@@ -54,9 +54,11 @@ def _configure_native_module_path() -> None:
     if sys.platform.startswith("win"):
         # The TensorRT DLLs are hundreds of MB, so they stay in the unpacked
         # NVIDIA zip under third_party/ and are added to the DLL search path.
+        # 11.x zips keep them in bin/, 10.x zips in lib/.
         third_party = Path(__file__).resolve().parent / "third_party"
-        for trt_lib in sorted(third_party.glob("TensorRT-*/lib")):
-            os.add_dll_directory(str(trt_lib))
+        for pattern in ("TensorRT-*/bin", "TensorRT-*/lib"):
+            for trt_dir in sorted(third_party.glob(pattern)):
+                os.add_dll_directory(str(trt_dir))
 
 
 _configure_native_module_path()

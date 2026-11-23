@@ -114,32 +114,43 @@ Invoke-BuildStep 'QScintilla' (Join-Path $buildRoot 'qscintilla.stamp') {
 }
 
 # ---------------------------------------------------------------------------
-# CUDA CUDART (headers + cudart.lib + cudart64_12.dll)
+# CUDA CUDART + CRT headers (cuda_runtime_api.h, cudart.lib, cudart64_13.dll)
 #
 # The app has no .cu sources, so the multi-gigabyte CUDA toolkit is not needed:
-# NVIDIA's PyPI wheel carries exactly the headers and libraries that
-# YOLOInferenceWorker.cpp uses (cuda_runtime_api.h, cudart.lib).
+# NVIDIA's public CUDA redistributables carry exactly the headers and libraries
+# that YOLOInferenceWorker.cpp uses.  CUDA 13 keeps the crt/ headers that
+# cuda_runtime_api.h includes in a separate package from cudart.  The version
+# must match the CUDA variant of the TensorRT package - TensorRT 11.3.0
+# packages are built against CUDA 13.4.
 # ---------------------------------------------------------------------------
-$cudartWheel = 'nvidia_cuda_runtime_cu12-12.9.79-py3-none-win_amd64.whl'
-$cudartUrl = 'https://files.pythonhosted.org/packages/59/df/e7c3a360be4f7b93cee39271b792669baeb3846c58a4df6dfcf187a7ffab/' + $cudartWheel
+$cudaVersion = '13.4.92'
+$cudaPackages = @('cuda_cudart', 'cuda_crt')
 
-Invoke-BuildStep 'CUDA CUDART 12.9' (Join-Path $buildRoot 'cudart.stamp') {
+Invoke-BuildStep 'CUDA 13.4' (Join-Path $buildRoot 'cudart.stamp') {
     $ErrorActionPreference = 'Stop'
-    $whl = Join-Path $thirdParty $cudartWheel
-    if (-not (Test-Path $whl)) {
-        Write-Host "Downloading $cudartWheel"
-        Invoke-WebRequest -Uri $cudartUrl -OutFile $whl -UseBasicParsing
-    }
-    $unpacked = Join-Path $buildRoot 'cudart_wheel'
-    if (Test-Path $unpacked) { Remove-Item -Recurse -Force $unpacked }
-    Copy-Item $whl "$unpacked.zip" -Force
-    Expand-Archive -Path "$unpacked.zip" -DestinationPath $unpacked -Force
-    Remove-Item "$unpacked.zip" -Force
+    foreach ($package in $cudaPackages) {
+        $archive = "${package}-windows-x86_64-$cudaVersion-archive.zip"
+        $url = "https://developer.download.nvidia.com/compute/cuda/redist/$package/windows-x86_64/$archive"
+        $zip = Join-Path $thirdParty $archive
+        if (-not (Test-Path $zip)) {
+            Write-Host "Downloading $archive"
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+        }
+        $unpacked = Join-Path $buildRoot $package
+        if (Test-Path $unpacked) { Remove-Item -Recurse -Force $unpacked }
+        Expand-Archive -Path $zip -DestinationPath $unpacked -Force
 
-    $root = Join-Path $unpacked 'nvidia/cuda_runtime'
-    Copy-Item -Path (Join-Path $root 'include/*') -Destination (Join-Path $prefix 'include') -Recurse -Force
-    Copy-Item -Path (Join-Path $root 'lib/x64/*.lib') -Destination (Join-Path $prefix 'lib') -Force
-    Copy-Item -Path (Join-Path $root 'bin/*.dll') -Destination (Join-Path $prefix 'bin') -Force
+        $root = (Get-ChildItem $unpacked -Directory | Select-Object -First 1).FullName
+        foreach ($part in @(
+            @{ source = 'include'; destination = (Join-Path $prefix 'include') },
+            @{ source = 'lib/x64'; destination = (Join-Path $prefix 'lib') },
+            @{ source = 'bin/x64'; destination = (Join-Path $prefix 'bin') })) {
+            $from = Join-Path $root $part.source
+            if (Test-Path $from) {
+                Copy-Item -Path (Join-Path $from '*') -Destination $part.destination -Recurse -Force
+            }
+        }
+    }
     $global:LASTEXITCODE = 0
 }
 
@@ -169,9 +180,12 @@ if ($trtDir) {
 } else {
     Write-Warning @'
 TensorRT was not found under third_party\, so the YOLO/TensorRT build stays off.
-To enable it, download the Windows zip for the SAME TensorRT version that built
-models\train13\weights\best.engine and re-run either of:
-  scripts\build_deps_windows.ps1 -TensorRtZip C:\path\to\TensorRT-<ver>.Windows.win10.cuda-<ver>.zip
+TensorRT is not published as a Windows binary wheel, so it needs the official
+NVIDIA zip for the SAME version that built models\train13\weights\best.engine
+(for TensorRT 11.3.0 that is the cuda-13.4 Windows zip, e.g.
+ TensorRT-Enterprise-11.3.0.99-Windows-amd64-cuda-13.4-Release-external.zip
+from developer.nvidia.com/tensorrt/download).  Then re-run either of:
+  scripts\build_deps_windows.ps1 -TensorRtZip C:\path\to\<that zip>
   scripts\build_deps_windows.ps1 -TensorRtUrl <download url>
 '@
 }

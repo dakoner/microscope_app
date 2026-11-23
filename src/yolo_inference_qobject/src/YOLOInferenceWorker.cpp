@@ -1,6 +1,7 @@
 #include "YOLOInferenceWorker.h"
 #include <QApplication>
 #include <QDebug>
+#include <QDir>
 #include <QFileInfo>
 #include <QStringList>
 
@@ -305,6 +306,14 @@ QString YOLOInferenceWorker::resolveModelPath() const
         tryPaths.prepend(appDir + "/../../../models/train13/weights/best.engine");
         tryPaths.append(appDir + "/../../../models/best.engine");
     }
+
+    // When the module is driven by the Python launcher, applicationDirPath() is
+    // the interpreter rather than the project: on Windows that is the base
+    // CPython install, not even the virtual environment.  The directory the
+    // launcher was started from is therefore searched as well.
+    const QString projectDir = QDir::currentPath();
+    tryPaths << projectDir + "/models/train13/weights/best.engine"
+             << projectDir + "/models/best.engine";
 
     for (const QString &path : tryPaths) {
         if (QFileInfo::exists(path)) {
