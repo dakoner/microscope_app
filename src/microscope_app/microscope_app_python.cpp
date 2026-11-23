@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <cstdint>
 #include <iostream>
+#include <optional>
 
 namespace py = pybind11;
 
@@ -63,6 +64,26 @@ PYBIND11_MODULE(_microscope_app_cpp, m)
     });
     m.def("mcp_emergency_stop_stage_ptr", [](std::uintptr_t ptr) {
         return reinterpret_cast<MainWindow *>(ptr)->mcpEmergencyStopStageJson();
+    });
+    m.def("mcp_start_scan_ptr", [](std::uintptr_t ptr, double xMin, double yMin,
+                                   double xMax, double yMax,
+                                   py::object feedrate, py::object serpentine,
+                                   py::object homeX, py::object homeY) {
+        auto optionalInt = [](const py::object &value) -> std::optional<int> {
+            return value.is_none() ? std::nullopt : std::optional<int>{value.cast<int>()};
+        };
+        auto optionalBool = [](const py::object &value) -> std::optional<bool> {
+            return value.is_none() ? std::nullopt : std::optional<bool>{value.cast<bool>()};
+        };
+        return reinterpret_cast<MainWindow *>(ptr)->mcpStartScanJson(
+            xMin, yMin, xMax, yMax, optionalInt(feedrate), optionalBool(serpentine),
+            optionalBool(homeX), optionalBool(homeY));
+    },
+    py::arg("ptr"), py::arg("x_min"), py::arg("y_min"), py::arg("x_max"), py::arg("y_max"),
+    py::arg("feedrate") = py::none(), py::arg("serpentine") = py::none(),
+    py::arg("home_x") = py::none(), py::arg("home_y") = py::none());
+    m.def("mcp_cancel_scan_ptr", [](std::uintptr_t ptr) {
+        return reinterpret_cast<MainWindow *>(ptr)->mcpCancelScanJson();
     });
 
     // Headless Camera + Stage Server bridge

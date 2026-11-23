@@ -31,19 +31,40 @@ not collide:
 - **Tools:**
   - `get_app_status` — remote endpoint info, scanning state, YOLO state, FPS, and frame/mosaic counters
   - `set_object_detection` — enable/disable the YOLO overlay
+  - `start_scan` (requires `confirm=true`) — run the GUI's mosaic scan over a rectangle
+  - `cancel_scan` — cancel that scan
 
 ### 3. GUI app in local mode (`microscope-app`)
 When the GUI drives local hardware directly (no `camera_server`), it starts in
 **full mode**:
 - **Default URL:** `http://127.0.0.1:8765/mcp`
 - **Server name:** `microscope-app`
-- **Tools:** All hardware tools above plus `set_object_detection`.
+- **Tools:** All hardware tools above plus `set_object_detection`, `start_scan` and
+  `cancel_scan`.
+
+## Mosaic scans from MCP
+
+`start_scan(x_min, y_min, x_max, y_max)` starts the same column scan the Stage
+Control panel starts, using stage millimetres for the region corners rather than a
+mosaic drag:
+
+- The region is highlighted in the mosaic view and shown in the Stage Control
+  panel, so the GUI stays in sync and its **Cancel Scan** button works.
+- `feedrate_mm_min`, `serpentine`, `home_x` and `home_y` are optional; omitted
+  values keep whatever the panel currently shows (defaults: 100 mm/min, serpentine,
+  home X). Tile pitch is unchanged: 75 % of the field of view.
+- It is refused while another scan runs, or when the stage link cannot be
+  established (remote mode connects it on demand, like `move_stage`), the ruler is
+  not calibrated, no camera frame is available, or the region leaves the
+  configured stage area.
+- `cancel_scan` is `cancelScan()`: feed hold plus stop, composite buffer reset, and
+  the scan video closed.
 
 ## Safety
 
 Stage motion requires `confirm=true`; an AI should set that only after the user
-has explicitly confirmed the requested destination. No unrestricted G-code
-execution is exposed.
+has explicitly confirmed the requested destination. `start_scan` uses the same
+rule for the region it will sweep. No unrestricted G-code execution is exposed.
 
 Note that `stop_camera` stops capture for the whole server: unlike the TCP `stop`
 command it does not check whether other clients are still streaming and it ignores

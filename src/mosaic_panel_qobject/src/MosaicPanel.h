@@ -25,6 +25,9 @@ public:
     void updateMosaic(const QImage &cameraFrame, double cncXMm, double cncYMm,
                       bool stitchFrame = true);
     void setCncPosition(double xMm, double yMm);
+    // Highlights scan regions given in stage millimetres and feeds them to the
+    // scan configuration panel through selectionsChanged().
+    void setScanSelectionsMm(const QVector<QRectF> &mmRects);
     void setStageCircles(const QVector<std::tuple<double, double, double>> &circlesMm);
     QPixmap createPreview(const QSize &size) const;
     MosaicWidget *displayWidget() const;

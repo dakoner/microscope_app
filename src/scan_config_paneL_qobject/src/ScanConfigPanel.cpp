@@ -73,7 +73,7 @@ void ScanConfigPanel::updateScanAreas(const QVector<QRectF> &areas)
     scanFinished(false);
 }
 
-void ScanConfigPanel::onStartClicked()
+void ScanConfigPanel::scanStarted()
 {
     m_startButton->setEnabled(false);
     m_homeXCheckbox->setEnabled(false);
@@ -82,13 +82,18 @@ void ScanConfigPanel::onStartClicked()
     m_radioSerpentine->setEnabled(false);
     m_scanFeedrateInput->setEnabled(false);
     m_cancelButton->setEnabled(true);
+    updateStatus("Scan started...");
+}
+
+void ScanConfigPanel::onStartClicked()
+{
+    scanStarted();
 
     emit startScanSignal(m_scanAreas,
                          m_homeXCheckbox->isChecked(),
                          m_homeYCheckbox->isChecked(),
                          m_radioSerpentine->isChecked(),
                          m_scanFeedrateInput->value());
-    updateStatus("Scan started...");
 }
 
 void ScanConfigPanel::scanFinished(bool /* success */)

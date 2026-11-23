@@ -22,6 +22,9 @@ public:
     void setCurrentFrameRect(const QRectF &rect);
     void setCncPosition(double xMm, double yMm);
     void setOverlayCircles(const QVector<QPair<QPointF, double>> &circles);
+    // Replaces the scan selections with mosaic-image rectangles.
+    void setSelections(const QVector<QRectF> &imageRects);
+    QVector<QRectF> selections() const { return m_selectedRects; }
     void resetMosaic(int width, int height, int tileSize);
     void updateTile(int row, int col, const QImage &image);
     void beginUpdate();

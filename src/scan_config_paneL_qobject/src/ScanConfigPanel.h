@@ -17,6 +17,14 @@ public:
 
     void updateScanAreas(const QVector<QRectF> &areas);
     void scanFinished(bool success);
+    // Mirrors the widget state of a locally started scan (used by MCP starts).
+    void scanStarted();
+
+    QVector<QRectF> scanAreas() const { return m_scanAreas; }
+    bool scanSerpentine() const { return m_radioSerpentine->isChecked(); }
+    bool scanHomeX() const { return m_homeXCheckbox->isChecked(); }
+    bool scanHomeY() const { return m_homeYCheckbox->isChecked(); }
+    int scanFeedrate() const { return m_scanFeedrateInput->value(); }
 
 public slots:
     void updateStatus(const QString &status);

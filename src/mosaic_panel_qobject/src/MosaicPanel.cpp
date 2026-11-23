@@ -70,6 +70,20 @@ void MosaicPanel::setCncPosition(double xMm, double yMm)
         m_displayWidget->setCncPosition(xMm, yMm);
 }
 
+void MosaicPanel::setScanSelectionsMm(const QVector<QRectF> &mmRects)
+{
+    if (!m_displayWidget || m_calibrationPxPerMm <= 0)
+        return;
+
+    const double scale = m_calibrationPxPerMm * SCALE_FACTOR;
+    QVector<QRectF> imageRects;
+    imageRects.reserve(mmRects.size());
+    for (const QRectF &rect : mmRects)
+        imageRects.append(QRectF(rect.x() * scale, rect.y() * scale,
+                                 rect.width() * scale, rect.height() * scale));
+    m_displayWidget->setSelections(imageRects);
+}
+
 void MosaicPanel::setStageCircles(const QVector<std::tuple<double, double, double>> &circlesMm)
 {
     QVector<QPair<QPointF, double>> px;

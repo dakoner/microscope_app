@@ -131,6 +131,8 @@ class QtMicroscopeBridge(QObject):
                 "yolo": lambda: self._native.mcp_set_yolo_ptr(self._target_ptr, *args),
                 "move_stage": lambda: self._native.mcp_move_stage_ptr(self._target_ptr, *args),
                 "emergency_stop_stage": lambda: self._native.mcp_emergency_stop_stage_ptr(self._target_ptr),
+                "start_scan": lambda: self._native.mcp_start_scan_ptr(self._target_ptr, *args),
+                "cancel_scan": lambda: self._native.mcp_cancel_scan_ptr(self._target_ptr),
             }
         try:
             response = methods[operation]()
@@ -240,6 +242,52 @@ def _register_app_tools(server: Any, bridge: QtMicroscopeBridge, *, include_app_
         """Enable or disable the microscope GUI's YOLO object-detection overlay."""
         return bridge.call("yolo", enabled)
 
+    if bridge.target_kind == "window":
+
+        @server.tool()
+        def start_scan(
+            x_min: float,
+            y_min: float,
+            x_max: float,
+            y_max: float,
+            feedrate_mm_min: int | None = None,
+            serpentine: bool | None = None,
+            home_x: bool | None = None,
+            home_y: bool | None = None,
+            confirm: bool = False,
+        ) -> dict[str, Any]:
+            """Start a rectangular mosaic scan over stage coordinates after confirmation.
+
+            Coordinates are millimetres and describe the region corners, not tile
+            counts. Omitted feedrate/path/homing arguments keep the values the
+            Stage Control panel currently shows.
+            """
+            if not confirm:
+                return {
+                    "ok": False,
+                    "message": (
+                        "A scan drives the stage continuously across the region. Explain "
+                        "the region and call again with confirm=true only after the user "
+                        "confirms it."
+                    ),
+                }
+            return bridge.call(
+                "start_scan",
+                x_min,
+                y_min,
+                x_max,
+                y_max,
+                feedrate_mm_min,
+                serpentine,
+                home_x,
+                home_y,
+            )
+
+        @server.tool()
+        def cancel_scan() -> dict[str, Any]:
+            """Cancel the running mosaic scan; the stage is feed-held and stopped."""
+            return bridge.call("cancel_scan")
+
 
 def create_server(
     bridge: QtMicroscopeBridge,
@@ -269,8 +317,10 @@ def create_server(
         name = "microscope-app"
         instructions = (
             "Control workstation GUI features of the microscope application (such as YOLO "
-            "object-detection overlay and mosaic/scanning status). Direct camera and stage "
-            "hardware control is provided by the separate microscope-hardware MCP server."
+            "object-detection overlay, mosaic scanning, and scanning status). Direct camera "
+            "and stage hardware control is provided by the separate microscope-hardware MCP "
+            "server. Never start a scan unless the user explicitly confirms the region and "
+            "the start_scan tool's confirm argument is true."
         )
     else:
         name = "microscope-app"

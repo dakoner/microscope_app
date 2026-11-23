@@ -1908,6 +1908,73 @@ std::string MainWindow::mcpEmergencyStopStageJson()
     return mcpJsonResult(true, "Stage stop requested.");
 }
 
+std::string MainWindow::mcpStartScanJson(double xMin, double yMin, double xMax, double yMax,
+                                         std::optional<int> feedrate, std::optional<bool> serpentine,
+                                         std::optional<bool> homeX, std::optional<bool> homeY)
+{
+    if (m_isScanning)
+        return mcpJsonResult(false, "A scan is already in progress.");
+    if (!m_cncControlPanel)
+        return mcpJsonResult(false, "The CNC stage controller is unavailable.");
+    // Remote mode connects the stage lazily, so ask for the link the same way an
+    // MCP stage move does before insisting that it exists.
+    if (!m_cncControlPanel->isStageConnected())
+        m_cncControlPanel->connectStage();
+    if (!m_cncControlPanel->isStageConnected())
+        return mcpJsonResult(false, "The stage is not connected. Connect it in the Stage Control panel first.");
+    if (m_rulerCalibration <= 0)
+        return mcpJsonResult(false, "Scan Error: Ruler not calibrated.");
+    if (m_currentPixmap.isNull())
+        return mcpJsonResult(false, "Scan Error: No camera image. Start the camera and wait for a frame.");
+    if (!std::isfinite(xMin) || !std::isfinite(yMin) || !std::isfinite(xMax) || !std::isfinite(yMax))
+        return mcpJsonResult(false, "Scan bounds must be finite stage coordinates.");
+    if (xMax <= xMin || yMax <= yMin)
+        return mcpJsonResult(false, "Scan region needs x_max > x_min and y_max > y_min.");
+
+    const int scanFeedrate = feedrate.value_or(m_scanPanel ? m_scanPanel->scanFeedrate() : 100);
+    if (scanFeedrate < 1 || scanFeedrate > 1000)
+        return mcpJsonResult(false, "Scan feedrate must be between 1 and 1000 mm/min.");
+
+    const double stageW = m_stageSettings.value("stage_width_mm").toDouble();
+    const double stageH = m_stageSettings.value("stage_height_mm").toDouble();
+    if (stageW > 0 && stageH > 0 && (xMin < 0 || yMin < 0 || xMax > stageW || yMax > stageH))
+        return mcpJsonResult(false, QString("Scan region must stay inside the %1 x %2 mm stage area.")
+                                        .arg(stageW).arg(stageH));
+
+    const bool useSerpentine = serpentine.value_or(m_scanPanel ? m_scanPanel->scanSerpentine() : true);
+    const bool useHomeX = homeX.value_or(m_scanPanel ? m_scanPanel->scanHomeX() : true);
+    const bool useHomeY = homeY.value_or(m_scanPanel ? m_scanPanel->scanHomeY() : false);
+
+    const QVector<QRectF> areas{QRectF(xMin, yMin, xMax - xMin, yMax - yMin)};
+    if (m_mosaicPanel)
+        m_mosaicPanel->setScanSelectionsMm(areas);
+    if (m_scanPanel)
+        m_scanPanel->updateScanAreas(areas);
+
+    log(QString("MCP scan requested: X%1-%2 Y%3-%4 F%5")
+            .arg(xMin).arg(xMax).arg(yMin).arg(yMax).arg(scanFeedrate));
+    startScan(areas, useHomeX, useHomeY, useSerpentine, scanFeedrate);
+    if (!m_isScanning)
+        return mcpJsonResult(false, "The scan could not be started. Check the stage connection and log.");
+
+    return mcpJsonResult(true, "Scan started.",
+                         QJsonObject{{"region_mm", QJsonObject{{"x_min", xMin}, {"y_min", yMin},
+                                                               {"x_max", xMax}, {"y_max", yMax}}},
+                                     {"feedrate_mm_min", scanFeedrate},
+                                     {"serpentine", useSerpentine},
+                                     {"home_x", useHomeX},
+                                     {"home_y", useHomeY}});
+}
+
+std::string MainWindow::mcpCancelScanJson()
+{
+    if (!m_isScanning)
+        return mcpJsonResult(false, "No scan is in progress.");
+    log("MCP scan cancel requested.");
+    cancelScan();
+    return mcpJsonResult(true, "Scan cancelled.");
+}
+
 // ---------- Frame pipeline ----------
 
 void MainWindow::updateFrame(QImage image, double frameTimestampSec)
@@ -2646,6 +2713,8 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
     m_scanSerpentine = serpentine;
     m_scanFeedrate = feedrate;
     m_isScanning = true;
+    if (m_scanPanel)
+        m_scanPanel->scanStarted();
 
     int imgW = m_currentPixmap.width();
     int imgH = m_currentPixmap.height();

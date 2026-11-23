@@ -73,6 +73,24 @@ void MosaicWidget::setOverlayCircles(const QVector<QPair<QPointF, double>> &circ
     update();
 }
 
+void MosaicWidget::setSelections(const QVector<QRectF> &imageRects)
+{
+    const QRectF imageBounds(0, 0, m_totalWidth, m_totalHeight);
+    QVector<QRectF> clipped;
+    for (const QRectF &rect : imageRects) {
+        const QRectF selection = rect.normalized().intersected(imageBounds);
+        if (!selection.isEmpty())
+            clipped.append(selection);
+    }
+
+    m_selectedRects = clipped;
+    m_isSelecting = false;
+    m_selStartPos = QPointF();
+    m_selCurrentPos = QPointF();
+    emit selectionsChanged(m_selectedRects);
+    update();
+}
+
 void MosaicWidget::resetMosaic(int width, int height, int tileSize)
 {
     m_totalWidth = width;

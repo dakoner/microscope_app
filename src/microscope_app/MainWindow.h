@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -76,6 +77,14 @@ public:
     std::string mcpSetYoloJson(bool enabled);
     std::string mcpMoveStageJson(double xMm, double yMm, int feedrate);
     std::string mcpEmergencyStopStageJson();
+    // Rectangular mosaic scan.  Unset optional arguments keep the values the
+    // Stage Control panel currently shows.
+    std::string mcpStartScanJson(double xMin, double yMin, double xMax, double yMax,
+                                 std::optional<int> feedrate = {},
+                                 std::optional<bool> serpentine = {},
+                                 std::optional<bool> homeX = {},
+                                 std::optional<bool> homeY = {});
+    std::string mcpCancelScanJson();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
