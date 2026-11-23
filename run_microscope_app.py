@@ -33,6 +33,7 @@ def _configure_qt_runtime_from_pyside6() -> None:
 
 _configure_qt_runtime_from_pyside6()
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow
 import shiboken6
 
@@ -185,6 +186,18 @@ def _resolve_mcp_mode(requested: str, bridge: QtMicroscopeBridge) -> McpMode:
     return "app" if status.get("camera_mode") == "remote" else "full"
 
 
+def _start_mcp_server(
+    bridge: QtMicroscopeBridge, opts: argparse.Namespace
+) -> None:
+    start_local_mcp_server(
+        bridge,
+        mode=_resolve_mcp_mode(opts.mcp_mode, bridge),
+        port=opts.mcp_port,
+        host=opts.mcp_bind,
+        enabled=False if opts.no_mcp else None,
+    )
+
+
 def main() -> int:
     qt_argv, opts = _apply_cli_options(sys.argv)
     app = QApplication(qt_argv)
@@ -194,14 +207,11 @@ def main() -> int:
     native.show_maximized_ptr(window_ptr)
     mcp_bridge = QtMicroscopeBridge(native, int(window_ptr), target_kind="window")
     app.aboutToQuit.connect(mcp_bridge.close)
-    mcp_mode = _resolve_mcp_mode(opts.mcp_mode, mcp_bridge)
-    start_local_mcp_server(
-        mcp_bridge,
-        mode=mcp_mode,
-        port=opts.mcp_port,
-        host=opts.mcp_bind,
-        enabled=False if opts.no_mcp else None,
-    )
+    # MainWindow applies camera_settings.json (local vs remote camera_server) from
+    # its own zero-delay timer, so the tool profile can only be resolved once the
+    # event loop has run that timer; starting earlier would always report "local"
+    # and bind the combined profile on the hardware port.
+    QTimer.singleShot(0, lambda: _start_mcp_server(mcp_bridge, opts))
 
     exit_code = app.exec()
 
