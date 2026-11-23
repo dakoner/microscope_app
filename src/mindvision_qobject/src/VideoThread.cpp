@@ -1,6 +1,7 @@
 #include "VideoThread.h"
 #include "MindVisionCamera.h"
 #include <QDebug>
+#include <QDateTime>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
@@ -50,6 +51,8 @@ VideoThread::VideoThread(QObject *parent)
       m_abort(false),
       m_isRecording(false),
       m_droppedFrames(0),
+      m_framesWritten(0),
+      m_startedMs(0),
       m_width(0),
       m_height(0),
     m_fps(30.0),
@@ -78,6 +81,8 @@ void VideoThread::startRecording(int width, int height, double fps, const QStrin
     m_isRecording = true;
     m_abort = false;
     m_droppedFrames = 0;
+    m_framesWritten = 0;
+    m_startedMs = QDateTime::currentMSecsSinceEpoch();
     m_queue.clear();
     
     if (!isRunning()) {
@@ -90,6 +95,28 @@ void VideoThread::stopRecording()
     QMutexLocker locker(&m_mutex);
     m_isRecording = false;
     m_condition.wakeOne();
+}
+
+int VideoThread::framesWritten()
+{
+    QMutexLocker locker(&m_mutex);
+    return m_framesWritten;
+}
+
+int VideoThread::framesDropped()
+{
+    QMutexLocker locker(&m_mutex);
+    return m_droppedFrames;
+}
+
+double VideoThread::measuredFps()
+{
+    QMutexLocker locker(&m_mutex);
+    if (m_framesWritten <= 0 || m_startedMs <= 0) {
+        return 0.0;
+    }
+    const double elapsedSec = (QDateTime::currentMSecsSinceEpoch() - m_startedMs) / 1000.0;
+    return elapsedSec > 0.001 ? m_framesWritten / elapsedSec : 0.0;
 }
 
 void VideoThread::addFrame(const QImage &image)
@@ -212,14 +239,15 @@ void VideoThread::run()
                 }
             }
 
-            static int frameCount = 0;
-            if (++frameCount % 30 == 0) {
-                m_mutex.lock();
-                const int queuedFrames = m_queue.size();
-                const int droppedFrames = m_droppedFrames;
-                m_mutex.unlock();
+            m_mutex.lock();
+            ++m_framesWritten;
+            const int written = m_framesWritten;
+            const int queuedFrames = m_queue.size();
+            const int droppedFrames = m_droppedFrames;
+            m_mutex.unlock();
 
-                qDebug() << "VideoThread: Processed frame" << frameCount
+            if (written % 30 == 0) {
+                qDebug() << "VideoThread: Processed frame" << written
                          << "Queue size:" << queuedFrames
                          << "Dropped frames:" << droppedFrames;
             }
@@ -229,5 +257,13 @@ void VideoThread::run()
     }
 
     ::pclose(pipe);
-    qDebug() << "VideoThread: Finished recording to" << filename;
+    m_mutex.lock();
+    const int totalWritten = m_framesWritten;
+    const int totalDropped = m_droppedFrames;
+    const qint64 elapsedMs = m_startedMs > 0
+        ? QDateTime::currentMSecsSinceEpoch() - m_startedMs : 0;
+    m_mutex.unlock();
+    qDebug() << "VideoThread: Finished recording to" << filename
+             << "- wrote" << totalWritten << "frames," << totalDropped
+             << "dropped in" << elapsedMs << "ms";
 }

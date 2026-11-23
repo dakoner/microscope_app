@@ -29,6 +29,13 @@ public:
     void setFrameSource(MindVisionCamera *camera);
     void clearFrameSource();
 
+    // What the recording actually achieved.  The fps passed to startRecording() is
+    // only the container's timebase hint, so anything that needs the real capture
+    // rate has to read these back once the recording has stopped.
+    int framesWritten();
+    int framesDropped();
+    double measuredFps();
+
 protected:
     void run() override;
 
@@ -41,6 +48,8 @@ private:
     bool m_abort;
     bool m_isRecording; // True while actively recording, False when stopping but draining queue
     int m_droppedFrames;
+    int m_framesWritten;
+    qint64 m_startedMs;
     
     // Recording parameters
     int m_width;

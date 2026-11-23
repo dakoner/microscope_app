@@ -403,24 +403,23 @@ static bool detectAutoruler(const QImage &source, AutorulerResult &result, QStri
     return true;
 }
 
-static QImage orientScanCompositeFrame(const QImage &image)
+static QImage orientScanCompositeFrame(const QImage &image, int rotationDeg)
 {
     const QImage source = image.convertToFormat(QImage::Format_RGB32);
     if (source.isNull())
         return {};
 
-    // Scan mode swaps camera axes relative to stage motion. Rotate frames into
-    // stage coordinates so each saved column has the same top/bottom direction
-    // as the scan area.
-    QImage oriented(source.height(), source.width(), QImage::Format_RGB32);
-    for (int y = 0; y < source.height(); ++y) {
-        const QRgb *srcLine = reinterpret_cast<const QRgb *>(source.constScanLine(y));
-        for (int x = 0; x < source.width(); ++x) {
-            oriented.setPixel(y, source.width() - 1 - x, srcLine[x]);
-        }
-    }
+    // Camera axes are square to the stage axes on this rig: an X command moves
+    // the image along +x and a Y command along +y (measured on the stage, see
+    // SCAN_GEOMETRY.md).  The rotation stays configurable for rigs whose
+    // camera is mounted turned relative to the stage.
+    const int normalized = ((rotationDeg % 360) + 360) % 360;
+    if (normalized == 0)
+        return source;
 
-    return oriented;
+    QTransform transform;
+    transform.rotate(normalized);
+    return source.transformed(transform);
 }
 
 static void setupPythonScriptEditor(QsciScintilla *editor)
@@ -2706,6 +2705,16 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
 {
     if (!m_cncControlPanel || areas.isEmpty()) return;
 
+    // An open serial port is not a live controller.  Refuse before any state is
+    // set: otherwise the scan runs, captures nothing, and writes an empty mosaic.
+    if (!m_cncControlPanel->isStageConnected() || !m_cncControlPanel->hasControllerStatus()) {
+        log("Scan refused: the stage controller has not reported a status. "
+            "Check that the controller is powered and answering '?' on the serial port.");
+        if (m_scanPanel)
+            m_scanPanel->scanFinished(false);
+        return;
+    }
+
     m_scanRegions = areas;
     m_scanRegionIndex = 0;
     m_scanHomeX = homeX;
@@ -2719,9 +2728,14 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
     int imgW = m_currentPixmap.width();
     int imgH = m_currentPixmap.height();
 
-    // Swap axes: scan along Y for each X-column
-    m_scanFovXMm = imgH / m_rulerCalibration;
-    m_scanFovYMm = imgW / m_rulerCalibration;
+    // Columns run along Y.  Camera axes are square to the stage axes, so the
+    // frame width maps to stage X and the height to stage Y unless a camera
+    // rotation is configured.
+    const bool axesSwapped = (m_scanCameraRotationDeg % 180) != 0;
+    const int orientedW = axesSwapped ? imgH : imgW;
+    const int orientedH = axesSwapped ? imgW : imgH;
+    m_scanFovXMm = orientedW / scanScaleXPxPerMm();
+    m_scanFovYMm = orientedH / scanScaleYPxPerMm();
     m_scanStepX = m_scanFovXMm * 0.75;
 
     m_cncControlPanel->sendCommand("G90");
@@ -2880,6 +2894,13 @@ bool MainWindow::setupNextScanRegion()
             .arg(m_scanRegionIndex + 1)
             .arg(m_scanRegions.size())
             .arg(m_scanTotalCols));
+    log(QString("Scan geometry: FOV %1 x %2 mm, column step %3 mm, scale %4 x %5 px/mm, camera rotation %6 deg.")
+            .arg(m_scanFovXMm, 0, 'f', 3)
+            .arg(m_scanFovYMm, 0, 'f', 3)
+            .arg(m_scanStepX, 0, 'f', 3)
+            .arg(scanScaleXPxPerMm(), 0, 'f', 1)
+            .arg(scanScaleYPxPerMm(), 0, 'f', 1)
+            .arg(m_scanCameraRotationDeg));
     if (m_scanPanel) {
         m_scanPanel->updateStatus(
             QString("Scanning region %1/%2 (%3 columns).")
@@ -2911,16 +2932,27 @@ void MainWindow::startScanRecording()
         log(QString("Scan output directory: %1").arg(QDir(m_scanVideoOutputDir).absolutePath()));
     }
 
-    double recordFps = m_currentFps > 0.1 ? m_currentFps : 30.0;
+    // m_currentFps is the camera's sensor readout rate as reported by the
+    // server, which can be several times the rate at which frames actually
+    // reach us.  Using it for the container makes the recording's timing and
+    // frame count meaningless, so clamp to something plausible and record the
+    // real rate from the writer when the recording stops.
+    double requestedFps = m_currentFps > 0.1 ? m_currentFps : 30.0;
+    if (requestedFps > 60.0)
+        requestedFps = 30.0;
     QString filename = QDir(m_scanVideoOutputDir).filePath("scan_capture.mkv");
 
     m_scanVideoThread->startRecording(m_currentImage.width(), m_currentImage.height(),
-                                      recordFps, filename);
+                                      requestedFps, filename);
     m_scanRecordingActive = true;
     m_scanCaptureEnabled = false;
     m_scanCaptureSegmentNumber = 0;
     m_scanVideoFilename = QFileInfo(filename).fileName();
-    m_scanRecordFps = recordFps;
+    m_scanRecordFps = requestedFps;
+    m_scanRecordFpsRequested = requestedFps;
+    m_scanRecordFpsMeasured = 0.0;
+    m_scanRecordFramesWritten = 0;
+    m_scanRecordFramesDropped = 0;
     m_scanFrameMetadata.clear();
     log(QString("Scan recording started: %1").arg(QFileInfo(filename).fileName()));
 }
@@ -2932,6 +2964,9 @@ void MainWindow::stopScanRecording(bool completed)
     if (hadVideoRecording) {
         m_scanVideoThread->stopRecording();
         m_scanVideoThread->wait(5000);
+        m_scanRecordFpsMeasured = m_scanVideoThread->measuredFps();
+        m_scanRecordFramesWritten = m_scanVideoThread->framesWritten();
+        m_scanRecordFramesDropped = m_scanVideoThread->framesDropped();
     }
 
     if (!m_scanVideoOutputDir.isEmpty() && !m_currentImage.isNull()) {
@@ -2943,8 +2978,11 @@ void MainWindow::stopScanRecording(bool completed)
     m_scanCaptureSegmentNumber = 0;
 
     if (hadVideoRecording) {
-        log(QString("Scan recording %1.")
-                .arg(completed ? "saved" : "stopped"));
+        log(QString("Scan recording %1. %2 frames written, %3 dropped, %4 fps.")
+                .arg(completed ? "saved" : "stopped")
+                .arg(m_scanRecordFramesWritten)
+                .arg(m_scanRecordFramesDropped)
+                .arg(m_scanRecordFpsMeasured, 0, 'f', 1));
     }
 }
 
@@ -2966,6 +3004,10 @@ void MainWindow::writeScanMetadataFile(int imageWidth, int imageHeight, bool com
     if (m_rulerCalibration > 0.0) {
         root["pixel_scale_mm_per_px"] = 1.0 / m_rulerCalibration;
     }
+    // Stage-mm -> composite-pixel scale actually used to lay out the mosaic.
+    root["scan_scale_x_px_per_mm"] = scanScaleXPxPerMm();
+    root["scan_scale_y_px_per_mm"] = scanScaleYPxPerMm();
+    root["scan_camera_rotation_deg"] = m_scanCameraRotationDeg;
 
     QJsonObject scanArea;
     scanArea["x_min"] = m_scanXMin;
@@ -2986,6 +3028,7 @@ void MainWindow::writeScanMetadataFile(int imageWidth, int imageHeight, bool com
     fov["y"] = m_scanFovYMm;
     root["fov_mm"] = fov;
 
+    root["step_x_mm"] = m_scanStepX;
     root["step_y_mm"] = m_scanStepY;
     root["planned_rows"] = m_scanTotalRows;
     root["feedrate"] = m_scanFeedrate;
@@ -2998,7 +3041,13 @@ void MainWindow::writeScanMetadataFile(int imageWidth, int imageHeight, bool com
     root["video_directory"] = QFileInfo(m_scanVideoOutputDir).fileName();
     root["video_directory_absolute"] = QDir(m_scanVideoOutputDir).absolutePath();
     root["video_file"] = m_scanVideoFilename;
-    root["record_fps"] = m_scanRecordFps;
+    root["record_fps_requested"] = m_scanRecordFpsRequested;
+    root["record_fps_measured"] = m_scanRecordFpsMeasured;
+    root["record_frames_written"] = m_scanRecordFramesWritten;
+    root["record_frames_dropped"] = m_scanRecordFramesDropped;
+    // Kept for readers that only know about the old field.
+    root["record_fps"] = m_scanRecordFpsMeasured > 0.0 ? m_scanRecordFpsMeasured
+                                                       : m_scanRecordFps;
     root["frame_count"] = static_cast<int>(m_scanFrameMetadata.size());
 
     QJsonArray frames;
@@ -3047,11 +3096,13 @@ void MainWindow::initializeScanCompositeBuffer(int imageWidth, int imageHeight)
 {
     resetScanCompositeBuffer();
 
-    if (m_rulerCalibration <= 0.0 || imageWidth <= 0 || imageHeight <= 0)
+    const double scaleX = scanScaleXPxPerMm();
+    const double scaleY = scanScaleYPxPerMm();
+    if (scaleX <= 0.0 || scaleY <= 0.0 || imageWidth <= 0 || imageHeight <= 0)
         return;
 
-    const int widthPx = std::max(1, static_cast<int>(std::ceil((m_scanXMax - m_scanXMin) * m_rulerCalibration)));
-    const int heightPx = std::max(1, static_cast<int>(std::ceil((m_scanYMax - m_scanYMin) * m_rulerCalibration)));
+    const int widthPx = std::max(1, static_cast<int>(std::ceil((m_scanXMax - m_scanXMin) * scaleX)));
+    const int heightPx = std::max(1, static_cast<int>(std::ceil((m_scanYMax - m_scanYMin) * scaleY)));
 
     m_scanCompositeImage = QImage(widthPx, heightPx, QImage::Format_RGB32);
     m_scanCompositeImage.fill(Qt::white);
@@ -3075,7 +3126,9 @@ void MainWindow::resetScanCompositeBuffer()
 
 void MainWindow::updateScanCompositeBuffer(const QImage &image, double stageXmm, double stageYmm)
 {
-    if (image.isNull() || m_rulerCalibration <= 0.0)
+    const double scaleX = scanScaleXPxPerMm();
+    const double scaleY = scanScaleYPxPerMm();
+    if (image.isNull() || scaleX <= 0.0 || scaleY <= 0.0)
         return;
 
     if (m_scanCompositeImage.isNull() ||
@@ -3087,17 +3140,17 @@ void MainWindow::updateScanCompositeBuffer(const QImage &image, double stageXmm,
     if (m_scanCompositeImage.isNull() || m_scanCompositeCoverage.isNull())
         return;
 
-    const QImage source = orientScanCompositeFrame(image);
+    const QImage source = orientScanCompositeFrame(image, m_scanCameraRotationDeg);
     if (source.isNull())
         return;
 
-    const double fovWidthMm = static_cast<double>(source.width()) / m_rulerCalibration;
-    const double fovHeightMm = static_cast<double>(source.height()) / m_rulerCalibration;
+    const double fovWidthMm = static_cast<double>(source.width()) / scaleX;
+    const double fovHeightMm = static_cast<double>(source.height()) / scaleY;
     const double tlXmm = stageXmm - (fovWidthMm / 2.0);
     const double tlYmm = stageYmm - (fovHeightMm / 2.0);
 
-    const int drawX = static_cast<int>(std::lround((tlXmm - m_scanXMin) * m_rulerCalibration));
-    const int drawY = static_cast<int>(std::lround((tlYmm - m_scanYMin) * m_rulerCalibration));
+    const int drawX = static_cast<int>(std::lround((tlXmm - m_scanXMin) * scaleX));
+    const int drawY = static_cast<int>(std::lround((tlYmm - m_scanYMin) * scaleY));
     const QRect frameRect(drawX, drawY, source.width(), source.height());
     const QRect bufferRect(0, 0, m_scanCompositeWidthPx, m_scanCompositeHeightPx);
     const QRect intersection = frameRect.intersected(bufferRect);
@@ -3181,6 +3234,16 @@ void MainWindow::loadSettings()
             m_rulerCalibration = settings.value("ruler_calibration").toDouble();
             if (m_rulerCalibration > 0)
                 m_lblRulerCalib->setText(QString("%1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
+        }
+
+        if (settings.contains("scan_scale_x_px_per_mm"))
+            m_scanScaleXPxPerMm = settings.value("scan_scale_x_px_per_mm").toDouble();
+        if (settings.contains("scan_scale_y_px_per_mm"))
+            m_scanScaleYPxPerMm = settings.value("scan_scale_y_px_per_mm").toDouble();
+        if (settings.contains("scan_camera_rotation")) {
+            const int rotation = settings.value("scan_camera_rotation").toInt(0);
+            if (rotation == 0 || rotation == 90 || rotation == 180 || rotation == 270)
+                m_scanCameraRotationDeg = rotation;
         }
 
         if (settings.contains("led_controller_port"))
@@ -3268,6 +3331,9 @@ void MainWindow::saveSettings()
     if (m_chkRemoteRecordOnServer)
         settings["remote_record_on_server"] = m_chkRemoteRecordOnServer->isChecked();
     settings["ruler_calibration"] = m_rulerCalibration;
+    settings["scan_scale_x_px_per_mm"] = m_scanScaleXPxPerMm;
+    settings["scan_scale_y_px_per_mm"] = m_scanScaleYPxPerMm;
+    settings["scan_camera_rotation"] = m_scanCameraRotationDeg;
     settings["led_controller_port"] = m_ledController->getPort();
     if (m_cncControlPanel)
         settings["cnc_controller_port"] = m_cncControlPanel->currentPortName();

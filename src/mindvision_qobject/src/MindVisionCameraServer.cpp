@@ -1429,6 +1429,10 @@ std::string MindVisionCameraServer::mcpStatusJson() const
     }
     result["available_stage_ports"] = portsArr;
     result["cnc_state"] = d->isStageConnected() ? d->m_stageState : QStringLiteral("Disconnected");
+    // stage_position_mm is the last value ever parsed from the controller.  When
+    // the controller is silent (or the port was only just opened) it is stale, so
+    // say so explicitly: consumers must not treat a stale position as current.
+    result["stage_position_reported"] = d->m_hasStagePosition;
     result["stage_position_mm"] = QJsonObject{
         {"x", d->m_stageX},
         {"y", d->m_stageY},

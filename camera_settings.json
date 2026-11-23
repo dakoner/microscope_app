@@ -1,13 +1,16 @@
 {
     "auto_exposure": false,
     "camera_mode": "remote",
-    "cnc_controller_port": "",
+    "cnc_controller_port": "ttyUSB0",
     "exposure_time": 0.517,
     "gain": 5,
-    "led_controller_port": "ttyS0",
+    "led_controller_port": "COM3",
     "remote_camera_host": "gork",
     "remote_camera_port": 8766,
     "remote_jpeg_quality": 85,
     "remote_record_on_server": false,
-    "ruler_calibration": 400
+    "ruler_calibration": 400,
+    "scan_camera_rotation": 0,
+    "scan_scale_x_px_per_mm": 800,
+    "scan_scale_y_px_per_mm": 870
 }

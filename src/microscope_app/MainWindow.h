@@ -255,6 +255,20 @@ private:
     double m_scanCurrentY = 0;
     bool m_scanIsFirstStrip = true;
     double m_scanFovXMm = 0, m_scanFovYMm = 0;
+    // Effective stage-mm -> image-pixel scale used to lay out the composite.
+    // Defaults to the ruler calibration; override per axis when the stage does
+    // not travel exactly the commanded distance.
+    double m_scanScaleXPxPerMm = 0.0, m_scanScaleYPxPerMm = 0.0;
+    // Camera sensor rotation relative to the stage axes (0/90/180/270).
+    int m_scanCameraRotationDeg = 0;
+    double scanScaleXPxPerMm() const
+    {
+        return m_scanScaleXPxPerMm > 0.0 ? m_scanScaleXPxPerMm : m_rulerCalibration;
+    }
+    double scanScaleYPxPerMm() const
+    {
+        return m_scanScaleYPxPerMm > 0.0 ? m_scanScaleYPxPerMm : m_rulerCalibration;
+    }
     QString m_scanVideoOutputDir;
     qint64 m_scanSessionTimestamp = 0;
     bool m_scanRecordingActive = false;
@@ -262,6 +276,10 @@ private:
     int m_scanCaptureSegmentNumber = 0;
     QString m_scanVideoFilename;
     double m_scanRecordFps = 0.0;
+    double m_scanRecordFpsRequested = 0.0;
+    double m_scanRecordFpsMeasured = 0.0;
+    int m_scanRecordFramesWritten = 0;
+    int m_scanRecordFramesDropped = 0;
     QImage m_scanCompositeImage;
     QImage m_scanCompositeCoverage;
     int m_scanCompositeWidthPx = 0;

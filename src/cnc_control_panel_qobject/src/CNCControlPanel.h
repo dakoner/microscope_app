@@ -32,6 +32,10 @@ public:
     QString remoteHost() const;
     quint16 remotePort() const;
     bool isStageConnected() const;
+    // True once the controller has actually answered a status request.  A serial
+    // port can be open and writable while the controller is silent or wedged, so
+    // isStageConnected() alone is not enough to trust motion commands.
+    bool hasControllerStatus() const { return !m_lastState.isEmpty(); }
     QString currentPortName() const;
     void setPreferredPort(const QString &portName);
     bool connectStage(const QString &portName = QString(), int baudRate = 115200);
