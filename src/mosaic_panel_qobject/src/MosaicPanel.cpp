@@ -195,8 +195,7 @@ void MosaicPanel::updateMosaic(const QImage &cameraFrame, double cncXMm, double 
             int srcW = intersection.width();
             int srcH = intersection.height();
 
-            QImage chunk = scaledFrame.copy(srcX, srcY, srcW, srcH)
-                               .mirrored(true, false);
+            QImage chunk = scaledFrame.copy(srcX, srcY, srcW, srcH);
             blendIntoTile(tile, coverage, destX, destY, chunk);
             m_displayWidget->updateTile(r, c, tile);
         }
