@@ -85,6 +85,9 @@ public:
                                  std::optional<bool> homeX = {},
                                  std::optional<bool> homeY = {});
     std::string mcpCancelScanJson();
+    // Closed-loop autofocus over the Z axis.
+    std::string mcpStartAutofocusJson(double rangeMm, double stepMm);
+    std::string mcpCancelAutofocusJson();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -127,6 +130,9 @@ private slots:
 
     // Frame pipeline
     void updateFrame(QImage image, double frameTimestampSec);
+    // Push one sharpness measurement per camera frame into the stage panel's
+    // closed-loop autofocus search.
+    void updateFocusMetric(const QImage &image);
     void updateFps(double fps);
     void handleError(QString message);
 
@@ -164,7 +170,11 @@ private slots:
     void cancelScan();
     void onScanFinished();
 
-        void log(const QString &message) const;
+    // Closed-loop autofocus
+    void onAutofocusStarted();
+    void onAutofocusFinished(bool success, double bestZMm, double bestScore, const QString &message);
+
+    void log(const QString &message) const;
 
 private:
     void connectSignals();
@@ -239,6 +249,11 @@ private:
     ScanConfigPanel *m_scanPanel = nullptr;
     double m_currentCncXMm = 0.0;
     double m_currentCncYMm = 0.0;
+    double m_currentCncZMm = 0.0;
+    double m_lastFocusSampleTime = 0.0;
+    // Auto exposure is paused while autofocus searches, because a changing
+    // exposure changes the sharpness score and would mislead the search.
+    bool m_autoExposureBeforeAutofocus = false;
     QString m_cncState = "Idle";
     bool m_isScanning = false;
     QVector<QRectF> m_scanRegions;
@@ -351,6 +366,7 @@ private:
 
     // Stage settings
     QVariantMap m_stageSettings;
+    bool m_stageAutoConnect = false;
 
     // Timer
     QTimer m_paramPollTimer;

@@ -7,6 +7,7 @@
 #include <QSerialPortInfo>
 #include <QRegularExpression>
 #include <algorithm>
+#include <cmath>
 
 static QString normalizeRxContent(const QString &content)
 {
@@ -19,6 +20,18 @@ static QString normalizeRxContent(const QString &content)
 }
 
 enum RxKind { RxNone, RxStatus, RxOk, RxError };
+
+// Autofocus timing.  Each search point is a small Z jog followed by a settle and
+// a window in which the pushed sharpness measurements are averaged, so a single
+// noisy frame can never steer the loop.
+namespace {
+constexpr int kFocusTickMs = 40;
+constexpr int kFocusSettleMs = 250;
+constexpr int kFocusSampleMs = 300;
+constexpr int kFocusMoveTimeoutMs = 8000;
+constexpr double kFocusFineDivisor = 4.0;
+constexpr double kFocusTolerance = 1e-4;
+}
 
 static RxKind classifyRx(const QString &content, QString &normalized)
 {
@@ -57,6 +70,8 @@ CNCControlPanel::CNCControlPanel(QWidget *parent)
     m_serialPollTimer.start(50);
 
     connect(&m_statusPollTimer, &QTimer::timeout, this, &CNCControlPanel::pollStatus);
+
+    connect(&m_focusTimer, &QTimer::timeout, this, &CNCControlPanel::advanceAutofocus);
 
     refreshSerialPorts();
     onSerialStatusChanged(false);
@@ -98,6 +113,38 @@ void CNCControlPanel::setupUi()
     posRow->addWidget(m_wposZLabel);
     statusLayout->addRow("WPos:", posRow);
     mainLayout->addLayout(statusLayout);
+
+    // Closed-loop autofocus.  Placed directly under the position readout so the
+    // main control stays visible without scrolling the panel.
+    auto *focusLayout = new QHBoxLayout;
+    m_autofocusButton = new QPushButton("Autofocus");
+    m_autofocusButton->setToolTip(QStringLiteral(
+        "Sweep the Z axis across the search range, measure sharpness at every point, and\n"
+        "return the stage to the best focus found.  Travels at the Z feedrate set below."));
+    m_focusRangeInput = new QDoubleSpinBox;
+    m_focusRangeInput->setRange(0.01, 10.0);
+    m_focusRangeInput->setDecimals(3);
+    m_focusRangeInput->setValue(1.0);
+    m_focusRangeInput->setPrefix("Range: ");
+    m_focusRangeInput->setSuffix(" mm");
+    m_focusRangeInput->setToolTip(QStringLiteral(
+        "Total Z travel to search, centred on the current position."));
+    m_focusStepInput = new QDoubleSpinBox;
+    m_focusStepInput->setRange(0.001, 1.0);
+    m_focusStepInput->setDecimals(3);
+    m_focusStepInput->setValue(0.05);
+    m_focusStepInput->setPrefix("Step: ");
+    m_focusStepInput->setSuffix(" mm");
+    m_focusStepInput->setToolTip(QStringLiteral(
+        "Coarse search step.  The refinement pass searches at a quarter of this step."));
+    m_focusScoreLabel = new QLabel(QStringLiteral("Focus: --"));
+    m_focusScoreLabel->setToolTip(QStringLiteral("Live sharpness score of the current camera frame."));
+    focusLayout->addWidget(m_autofocusButton);
+    focusLayout->addWidget(m_focusRangeInput);
+    focusLayout->addWidget(m_focusStepInput);
+    focusLayout->addStretch();
+    focusLayout->addWidget(m_focusScoreLabel);
+    mainLayout->addLayout(focusLayout);
 
     // Movement grid
     auto *grid = new QGridLayout;
@@ -190,6 +237,7 @@ void CNCControlPanel::setupUi()
     connect(m_zFeedrateInput, &QSpinBox::valueChanged, this, &CNCControlPanel::onZFeedrateChanged);
     connect(m_sendCommandButton, &QPushButton::clicked, this, &CNCControlPanel::sendConsoleCommand);
     connect(m_commandInput, &QLineEdit::returnPressed, this, &CNCControlPanel::sendConsoleCommand);
+    connect(m_autofocusButton, &QPushButton::clicked, this, &CNCControlPanel::onAutofocusClicked);
 }
 
 void CNCControlPanel::setRemoteMode(bool remote)
@@ -423,6 +471,13 @@ void CNCControlPanel::parseStatus(const QString &statusStr)
         }
 
         m_lastState = parts[0];
+
+        // A controller that drops into Alarm or Check will not answer further
+        // jogs, so end the search instead of letting it run into the timeout.
+        if (m_focusPhase != FocusPhase::Inactive &&
+            (parts[0] == QLatin1String("Alarm") || parts[0] == QLatin1String("Check"))) {
+            cancelAutofocus(QString("Autofocus aborted: the controller reported %1.").arg(parts[0]));
+        }
     }
 
     static QRegularExpression posRe("(?:WPos|MPos):(-?[\\d\\.]+),(-?[\\d\\.]+),(-?[\\d\\.]+)");
@@ -431,6 +486,7 @@ void CNCControlPanel::parseStatus(const QString &statusStr)
         double x = match.captured(1).toDouble();
         double y = match.captured(2).toDouble();
         double z = match.captured(3).toDouble();
+        m_lastZPosition = z;
         m_wposXLabel->setText(QString::number(x, 'f', 3));
         m_wposYLabel->setText(QString::number(y, 'f', 3));
         m_wposZLabel->setText(QString::number(z, 'f', 3));
@@ -450,6 +506,7 @@ void CNCControlPanel::onSerialStatusChanged(bool connected)
         m_pendingScanEvents.clear();
         m_lastState.clear();
         m_statusPollTimer.stop();
+        cancelAutofocus(QStringLiteral("Autofocus aborted: the stage link went down."));
     } else {
         m_statusPollTimer.start(m_statusPollIntervalMs);
     }
@@ -462,6 +519,7 @@ void CNCControlPanel::onSerialStatusChanged(bool connected)
     m_commandInput->setEnabled(connected);
     m_xyFeedrateInput->setEnabled(connected);
     m_zFeedrateInput->setEnabled(connected);
+    updateAutofocusControlsEnabled();
 }
 
 void CNCControlPanel::sendCommand(const QString &cmd)
@@ -620,6 +678,304 @@ void CNCControlPanel::setStatusPollIntervalMs(int intervalMs)
 
 void CNCControlPanel::stop()
 {
+    cancelAutofocus(QStringLiteral("Autofocus aborted."));
     m_serialPollTimer.stop();
     m_statusPollTimer.stop();
+}
+
+// ---------- Closed-loop autofocus ----------
+
+void CNCControlPanel::setAutofocusAllowed(bool allowed)
+{
+    if (m_autofocusAllowed == allowed) {
+        return;
+    }
+    m_autofocusAllowed = allowed;
+    if (!allowed) {
+        cancelAutofocus(QStringLiteral("Autofocus aborted: the stage is busy with a scan."));
+    }
+    updateAutofocusControlsEnabled();
+}
+
+void CNCControlPanel::updateAutofocusControlsEnabled()
+{
+    if (!m_autofocusButton) {
+        return;
+    }
+    const bool active = (m_focusPhase != FocusPhase::Inactive);
+    // While a search runs the button stays enabled so it can act as Stop, but the
+    // search parameters are locked so they cannot change mid-sweep.
+    m_autofocusButton->setEnabled(active
+                                  || (isStageConnected() && hasControllerStatus() && m_autofocusAllowed));
+    m_autofocusButton->setText(active ? QStringLiteral("Stop") : QStringLiteral("Autofocus"));
+    if (m_focusRangeInput) {
+        m_focusRangeInput->setEnabled(!active);
+    }
+    if (m_focusStepInput) {
+        m_focusStepInput->setEnabled(!active);
+    }
+}
+
+void CNCControlPanel::onAutofocusClicked()
+{
+    if (m_focusPhase != FocusPhase::Inactive) {
+        cancelAutofocus(QStringLiteral("Autofocus cancelled by user."));
+        return;
+    }
+    startAutofocus();
+}
+
+void CNCControlPanel::submitFocusSample(double score)
+{
+    if (!std::isfinite(score)) {
+        return;
+    }
+    m_lastFocusScore = score;
+    if (m_focusScoreLabel) {
+        m_focusScoreLabel->setText(QString("Focus: %1").arg(score, 0, 'f', 1));
+    }
+    if (m_focusPhase != FocusPhase::Sample) {
+        return;
+    }
+    m_focusScoreSum += score;
+    ++m_focusScoreCount;
+}
+
+bool CNCControlPanel::startAutofocus(double searchRangeMm, double coarseStepMm)
+{
+    if (m_focusPhase != FocusPhase::Inactive) {
+        emit logSignal(QStringLiteral("Autofocus is already running."));
+        return false;
+    }
+    if (!isStageConnected()) {
+        emit logSignal(QStringLiteral("Autofocus refused: the stage is not connected."));
+        return false;
+    }
+    if (!hasControllerStatus()) {
+        emit logSignal(QStringLiteral("Autofocus refused: the stage controller has not reported a status."));
+        return false;
+    }
+    if (!std::isfinite(m_lastZPosition)) {
+        emit logSignal(QStringLiteral("Autofocus refused: the stage has not reported a Z position yet."));
+        return false;
+    }
+
+    const double range = searchRangeMm > 0.0
+                             ? searchRangeMm
+                             : (m_focusRangeInput ? m_focusRangeInput->value() : 1.0);
+    const double coarse = coarseStepMm > 0.0
+                             ? coarseStepMm
+                             : (m_focusStepInput ? m_focusStepInput->value() : 0.05);
+    if (range < 0.01 || range > 10.0) {
+        emit logSignal(QStringLiteral("Autofocus refused: the search range must be between 0.01 and 10 mm."));
+        return false;
+    }
+    if (coarse < 0.001 || coarse > range / 2.0) {
+        emit logSignal(QStringLiteral(
+            "Autofocus refused: the step must be at least 0.001 mm and no more than half the search range."));
+        return false;
+    }
+
+    m_focusCoarseStepMm = coarse;
+    m_focusFineStepMm = std::max(0.0005, coarse / kFocusFineDivisor);
+    m_focusFeedrate = m_zFeedrateInput ? m_zFeedrateInput->value() : m_zFeedrate;
+    m_focusBestZ = m_lastZPosition;
+    m_focusBestScore = 0.0;
+
+    startFocusPass(0, m_lastZPosition, range / 2.0, m_focusCoarseStepMm);
+    m_focusTimer.start(kFocusTickMs);
+    updateAutofocusControlsEnabled();
+    emit autofocusStarted();
+    emit logSignal(QString("Autofocus: sweeping %1 mm around Z=%2 mm in %3 mm steps at F%4.")
+                       .arg(range, 0, 'f', 3)
+                       .arg(m_lastZPosition, 0, 'f', 3)
+                       .arg(coarse, 0, 'f', 3)
+                       .arg(m_focusFeedrate));
+    return true;
+}
+
+void CNCControlPanel::startFocusPass(int pass, double centreMm, double halfWidthMm, double stepMm)
+{
+    m_focusPass = pass;
+    m_focusTargets.clear();
+    m_focusScores.clear();
+
+    if (halfWidthMm <= 0.0 || stepMm <= 0.0) {
+        m_focusTargets.append(centreMm);
+        m_focusScores.append(0.0);
+    } else {
+        const int steps = static_cast<int>(std::floor(halfWidthMm * 2.0 / stepMm)) + 1;
+        for (int i = 0; i < steps; ++i) {
+            m_focusTargets.append(centreMm - halfWidthMm + i * stepMm);
+            m_focusScores.append(0.0);
+        }
+    }
+    m_focusIndex = 0;
+    beginFocusMove();
+}
+
+void CNCControlPanel::beginFocusMove()
+{
+    const double target = m_focusTargets.at(m_focusIndex);
+    m_focusTargetZ = target;
+    const double delta = target - m_lastZPosition;
+
+    if (std::abs(delta) < kFocusTolerance) {
+        beginFocusSampleWindow();
+        return;
+    }
+
+    m_focusPhase = FocusPhase::Move;
+    m_focusClock.restart();
+    // Commanded travel time plus a settle margin.  The controller is only polled
+    // every 100 ms, so a short jog can be over before a status report ever shows
+    // it running; waiting out the computed travel is more reliable than trying to
+    // catch the transient Run state.
+    const double travelMs = 60000.0 * std::abs(delta) / std::max(1, m_focusFeedrate);
+    m_focusMoveWaitMs = std::max<double>(kFocusSettleMs, travelMs + kFocusSettleMs);
+    sendCommand(QString("$J=G91 Z%1 F%2").arg(delta, 0, 'f', 4).arg(m_focusFeedrate));
+}
+
+void CNCControlPanel::advanceAutofocus()
+{
+    if (m_focusPhase == FocusPhase::Inactive) {
+        return;
+    }
+
+    const qint64 elapsed = m_focusClock.elapsed();
+    if (elapsed > kFocusMoveTimeoutMs) {
+        cancelAutofocus(QString("Autofocus timed out waiting for the stage to reach Z=%1 mm.")
+                            .arg(m_focusTargetZ, 0, 'f', 3));
+        return;
+    }
+
+    if (m_focusPhase == FocusPhase::Move) {
+        if (elapsed >= m_focusMoveWaitMs && m_lastState == QLatin1String("Idle")) {
+            beginFocusSampleWindow();
+        }
+        return;
+    }
+
+    // FocusPhase::Sample
+    if (elapsed >= kFocusSampleMs) {
+        finishFocusSample();
+    }
+}
+
+void CNCControlPanel::beginFocusSampleWindow()
+{
+    m_focusPhase = FocusPhase::Sample;
+    m_focusScoreSum = 0.0;
+    m_focusScoreCount = 0;
+    m_focusClock.restart();
+}
+
+void CNCControlPanel::finishFocusSample()
+{
+    if (m_focusScoreCount == 0) {
+        cancelAutofocus(QStringLiteral(
+            "Autofocus aborted: no camera frames arrived while measuring. Start the camera first."));
+        return;
+    }
+
+    m_focusScores[m_focusIndex] = m_focusScoreSum / m_focusScoreCount;
+    ++m_focusIndex;
+
+    if (m_focusIndex < m_focusTargets.size()) {
+        beginFocusMove();
+        return;
+    }
+
+    // This pass is done.  Pick the best point and decide what to search next.
+    int best = 0;
+    for (int i = 1; i < m_focusScores.size(); ++i) {
+        if (m_focusScores.at(i) > m_focusScores.at(best)) {
+            best = i;
+        }
+    }
+    const double bestZ = m_focusTargets.at(best);
+    const double bestScore = m_focusScores.at(best);
+
+    switch (m_focusPass) {
+    case 0:
+        emit logSignal(QString("Autofocus: coarse sweep peaked at Z=%1 mm (score %2), refining.")
+                           .arg(bestZ, 0, 'f', 3)
+                           .arg(bestScore, 0, 'f', 1));
+        startFocusPass(1, bestZ, m_focusCoarseStepMm, m_focusFineStepMm);
+        return;
+
+    case 1: {
+        m_focusBestZ = bestZ;
+        m_focusBestScore = bestScore;
+        // Fit a parabola through the three points around the maximum so the final
+        // stop can land between two measurement points.
+        double vertex = bestZ;
+        if (best > 0 && best + 1 < m_focusScores.size()) {
+            const double y0 = m_focusScores.at(best - 1);
+            const double y1 = m_focusScores.at(best);
+            const double y2 = m_focusScores.at(best + 1);
+            const double curvature = y0 - 2.0 * y1 + y2;
+            if (curvature < -1e-9) {
+                const double offset = 0.5 * (y0 - y2) / curvature;
+                if (std::isfinite(offset) && std::abs(offset) <= 1.0) {
+                    vertex = bestZ + offset * m_focusFineStepMm;
+                }
+            }
+        }
+        startFocusPass(2, vertex, 0.0, 0.0);
+        return;
+    }
+
+    case 2:
+        // The parabola vertex is only trusted if it actually measured well; noise
+        // or an asymmetric peak can push it somewhere worse.
+        if (bestScore >= m_focusBestScore * 0.95) {
+            m_focusBestZ = bestZ;
+            m_focusBestScore = bestScore;
+            finishAutofocus(true, QString("Autofocus complete: Z=%1 mm, focus score %2.")
+                                      .arg(bestZ, 0, 'f', 3)
+                                      .arg(bestScore, 0, 'f', 1));
+        } else {
+            emit logSignal(QString("Autofocus: vertex Z=%1 mm measured worse than Z=%2 mm, returning.")
+                               .arg(bestZ, 0, 'f', 3)
+                               .arg(m_focusBestZ, 0, 'f', 3));
+            startFocusPass(3, m_focusBestZ, 0.0, 0.0);
+        }
+        return;
+
+    default:
+        finishAutofocus(true, QString("Autofocus complete: Z=%1 mm, focus score %2.")
+                                  .arg(m_focusBestZ, 0, 'f', 3)
+                                  .arg(m_focusBestScore, 0, 'f', 1));
+        return;
+    }
+}
+
+void CNCControlPanel::finishAutofocus(bool success, const QString &message)
+{
+    m_focusPhase = FocusPhase::Inactive;
+    m_focusTimer.stop();
+    m_focusTargets.clear();
+    m_focusScores.clear();
+    m_focusIndex = 0;
+    updateAutofocusControlsEnabled();
+    emit logSignal(message);
+    emit autofocusFinished(success, m_focusBestZ, m_focusBestScore, message);
+}
+
+void CNCControlPanel::cancelAutofocus(const QString &reason)
+{
+    if (m_focusPhase == FocusPhase::Inactive) {
+        return;
+    }
+    // A jog may still be in flight.  Feed hold goes straight to the controller
+    // instead of queueing behind the command that is already running.
+    if (m_focusPhase == FocusPhase::Move && m_serialWorker) {
+        m_serialWorker->send_raw_command("!");
+    }
+    m_commandQueue.clear();
+    m_waitingForOk = false;
+    m_focusBestZ = std::isfinite(m_lastZPosition) ? m_lastZPosition : m_focusBestZ;
+    m_focusBestScore = m_lastFocusScore;
+    finishAutofocus(false, reason.isEmpty() ? QStringLiteral("Autofocus cancelled.") : reason);
 }

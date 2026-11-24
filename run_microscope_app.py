@@ -122,8 +122,10 @@ def _apply_cli_options(argv: list[str]) -> tuple[list[str], argparse.Namespace]:
     )
     parser.add_argument(
         "--auto-connect-stage",
-        action="store_true",
-        help="Automatically connect to the CNC stage serial port on startup.",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Connect the CNC stage on startup.  Defaults to the 'stage_auto_connect' "
+             "entry in camera_settings.json; --no-auto-connect-stage overrides it for one run.",
     )
     parser.add_argument(
         "--mcp-mode",
@@ -173,8 +175,8 @@ def _apply_cli_options(argv: list[str]) -> tuple[list[str], argparse.Namespace]:
         os.environ["MICROSCOPE_CAMERA_SYNTHETIC"] = "1"
     if known.stage_port:
         os.environ["MICROSCOPE_STAGE_PORT"] = known.stage_port
-    if known.auto_connect_stage:
-        os.environ["MICROSCOPE_STAGE_AUTO_CONNECT"] = "1"
+    if known.auto_connect_stage is not None:
+        os.environ["MICROSCOPE_STAGE_AUTO_CONNECT"] = "1" if known.auto_connect_stage else "0"
 
     return [argv[0], *remaining], known
 

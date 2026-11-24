@@ -85,6 +85,13 @@ PYBIND11_MODULE(_microscope_app_cpp, m)
     m.def("mcp_cancel_scan_ptr", [](std::uintptr_t ptr) {
         return reinterpret_cast<MainWindow *>(ptr)->mcpCancelScanJson();
     });
+    m.def("mcp_start_autofocus_ptr", [](std::uintptr_t ptr, double range_mm, double step_mm) {
+        return reinterpret_cast<MainWindow *>(ptr)->mcpStartAutofocusJson(range_mm, step_mm);
+    },
+    py::arg("ptr"), py::arg("range_mm") = 0.0, py::arg("step_mm") = 0.0);
+    m.def("mcp_cancel_autofocus_ptr", [](std::uintptr_t ptr) {
+        return reinterpret_cast<MainWindow *>(ptr)->mcpCancelAutofocusJson();
+    });
 
     // Headless Camera + Stage Server bridge
     m.def("create_camera_server_ptr", [](const std::string &bindAddress,

@@ -133,6 +133,8 @@ class QtMicroscopeBridge(QObject):
                 "emergency_stop_stage": lambda: self._native.mcp_emergency_stop_stage_ptr(self._target_ptr),
                 "start_scan": lambda: self._native.mcp_start_scan_ptr(self._target_ptr, *args),
                 "cancel_scan": lambda: self._native.mcp_cancel_scan_ptr(self._target_ptr),
+                "start_autofocus": lambda: self._native.mcp_start_autofocus_ptr(self._target_ptr, *args),
+                "cancel_autofocus": lambda: self._native.mcp_cancel_autofocus_ptr(self._target_ptr),
             }
         try:
             response = methods[operation]()
@@ -232,6 +234,12 @@ def _register_app_tools(server: Any, bridge: QtMicroscopeBridge, *, include_app_
                 "frames_received",
                 "frames_written_to_mosaic",
                 "fps",
+                "stage_connected",
+                "stage_port",
+                "cnc_state",
+                "stage_position_mm",
+                "focus_score",
+                "autofocus_active",
             )
             result = {k: raw[k] for k in app_fields if k in raw}
             result["role"] = "app"
@@ -287,6 +295,37 @@ def _register_app_tools(server: Any, bridge: QtMicroscopeBridge, *, include_app_
         def cancel_scan() -> dict[str, Any]:
             """Cancel the running mosaic scan; the stage is feed-held and stopped."""
             return bridge.call("cancel_scan")
+
+        @server.tool()
+        def autofocus(
+            range_mm: float = 0.0,
+            step_mm: float = 0.0,
+            confirm: bool = False,
+        ) -> dict[str, Any]:
+            """Drive the Z stage through a focus sweep and stop at the sharpest point.
+
+            The stage walks the search range in coarse steps, then refines around the
+            best sharpness found, then returns to it.  Auto exposure is paused for the
+            duration so the score stays comparable.  Pass confirm=True to allow motion.
+
+            range_mm: total Z travel to search, centred on the current Z. 0 keeps the
+                value the Stage Control panel shows.
+            step_mm: coarse step in millimetres; the refinement pass uses a quarter of
+                it.  0 keeps the panel's value.
+            """
+            if not confirm:
+                return {
+                    "success": False,
+                    "message": (
+                        "autofocus moves the stage. Re-call with confirm=True to allow motion."
+                    ),
+                }
+            return bridge.call("start_autofocus", float(range_mm), float(step_mm))
+
+        @server.tool()
+        def cancel_autofocus() -> dict[str, Any]:
+            """Stop a running autofocus search where the stage currently is."""
+            return bridge.call("cancel_autofocus")
 
 
 def create_server(

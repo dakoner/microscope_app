@@ -46,6 +46,7 @@
 #include "MindVisionCamera.h"
 #include "VideoThread.h"
 #include "CNCControlPanel.h"
+#include "FocusMetric.h"
 #include "LEDController.h"
 #include "MosaicPanel.h"
 #include "ScanConfigPanel.h"
@@ -749,6 +750,8 @@ MainWindow::MainWindow(QWidget *parent)
         connect(m_cncControlPanel, &CNCControlPanel::scanFinished, this, &MainWindow::onScanFinished);
         connect(m_cncControlPanel, &CNCControlPanel::scanRowStartReady, this, &MainWindow::onScanRowStartReady);
         connect(m_cncControlPanel, &CNCControlPanel::scanRowReady, this, &MainWindow::onRowFinished);
+        connect(m_cncControlPanel, &CNCControlPanel::autofocusStarted, this, &MainWindow::onAutofocusStarted);
+        connect(m_cncControlPanel, &CNCControlPanel::autofocusFinished, this, &MainWindow::onAutofocusFinished);
     }
 
     // LED controller
@@ -961,13 +964,14 @@ void MainWindow::syncCameraConnectionFromUi()
         m_cncControlPanel->refreshSerialPorts();
 
         const QString envStagePort = qEnvironmentVariable("MICROSCOPE_STAGE_PORT").trimmed();
-        const QString envAutoConnect = qEnvironmentVariable("MICROSCOPE_STAGE_AUTO_CONNECT").trimmed().toLower();
-        if (!m_cncControlPanel->isStageConnected()) {
-            if (!envStagePort.isEmpty()) {
-                m_cncControlPanel->connectStage(envStagePort, 115200);
-            } else if (envAutoConnect == "1" || envAutoConnect == "true" || envAutoConnect == "yes") {
-                m_cncControlPanel->connectStage();
-            }
+        if (!envStagePort.isEmpty()) {
+            m_cncControlPanel->setPreferredPort(envStagePort);
+        }
+        // stage_auto_connect from camera_settings.json is the standing default; an
+        // explicit MICROSCOPE_STAGE_PORT still implies "connect to this port now".
+        if (!m_cncControlPanel->isStageConnected()
+            && (m_stageAutoConnect || !envStagePort.isEmpty())) {
+            m_cncControlPanel->connectStage(envStagePort, 115200);
         }
     }
 
@@ -1785,8 +1789,12 @@ std::string MainWindow::mcpStatusJson() const
         result["stage_port"] = m_cncControlPanel->currentPortName();
     }
     result["cnc_state"] = m_cncState;
+    if (m_cncControlPanel) {
+        result["autofocus_active"] = m_cncControlPanel->isAutofocusActive();
+        result["focus_score"] = m_cncControlPanel->lastFocusScore();
+    }
     result["stage_position_mm"] = QJsonObject{
-        {"x", m_currentCncXMm}, {"y", m_currentCncYMm}
+        {"x", m_currentCncXMm}, {"y", m_currentCncYMm}, {"z", m_currentCncZMm}
     };
     return mcpJsonResult(true, "Microscope status retrieved.", result);
 }
@@ -1974,6 +1982,39 @@ std::string MainWindow::mcpCancelScanJson()
     return mcpJsonResult(true, "Scan cancelled.");
 }
 
+std::string MainWindow::mcpStartAutofocusJson(double rangeMm, double stepMm)
+{
+    if (!m_cncControlPanel)
+        return mcpJsonResult(false, "Stage control panel is not available.");
+    if (m_isScanning)
+        return mcpJsonResult(false, "A mosaic scan is in progress; cancel it before focusing.");
+    if (!m_cncControlPanel->isStageConnected())
+        return mcpJsonResult(false, "The stage is not connected.");
+    if (m_cncControlPanel->isAutofocusActive())
+        return mcpJsonResult(false, "Autofocus is already running.");
+    if (!m_camera || !m_camera->isRunning())
+        return mcpJsonResult(false, "The camera is not running, so there is nothing to focus on.");
+
+    log("MCP autofocus requested.");
+    if (!m_cncControlPanel->startAutofocus(rangeMm, stepMm))
+        return mcpJsonResult(false, "Autofocus could not be started; see the stage log.");
+    return mcpJsonResult(true, "Autofocus started.",
+                         QJsonObject{
+                             {"stage_position_mm", QJsonObject{{"z", m_cncControlPanel->currentZPositionMm()}}}
+                         });
+}
+
+std::string MainWindow::mcpCancelAutofocusJson()
+{
+    if (!m_cncControlPanel)
+        return mcpJsonResult(false, "Stage control panel is not available.");
+    if (!m_cncControlPanel->isAutofocusActive())
+        return mcpJsonResult(false, "No autofocus search is running.");
+    log("MCP autofocus cancel requested.");
+    m_cncControlPanel->cancelAutofocus(QStringLiteral("Autofocus cancelled over MCP."));
+    return mcpJsonResult(true, "Autofocus cancelled.");
+}
+
 // ---------- Frame pipeline ----------
 
 void MainWindow::updateFrame(QImage image, double frameTimestampSec)
@@ -2005,6 +2046,7 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
 
     m_currentImage = image;
     m_currentPixmap = QPixmap::fromImage(m_currentImage);
+    updateFocusMetric(image);
     updateHistogram(image);
     if (m_hasHistogramPointer)
         updateHistogramPointer(m_histogramPointer);
@@ -2062,6 +2104,22 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
         m_yoloWorker->inferFrame(image, m_yoloConfThreshold);
     }
 #endif
+}
+
+void MainWindow::updateFocusMetric(const QImage &image)
+{
+    if (!m_cncControlPanel) {
+        return;
+    }
+    // The Laplacian pass is cheap but not free, and the closed loop only needs a
+    // few measurements per second, so both the live readout and the search run at
+    // roughly 10 Hz instead of the full camera rate.
+    const double now = nowSec();
+    if (now - m_lastFocusSampleTime < 0.1) {
+        return;
+    }
+    m_lastFocusSampleTime = now;
+    m_cncControlPanel->submitFocusSample(focus::sharpnessScore(image));
 }
 
 void MainWindow::updateFrameStatsLabel()
@@ -2600,10 +2658,11 @@ void MainWindow::initMosaicPanel(bool forceRecreate)
     layout->addWidget(m_scanPanel);
 }
 
-void MainWindow::onCncPositionUpdated(double x, double y, double /*z*/)
+void MainWindow::onCncPositionUpdated(double x, double y, double z)
 {
     m_currentCncXMm = x;
     m_currentCncYMm = y;
+    m_currentCncZMm = z;
     addPoseSample(x, y, monotonicNowSec());
     if (m_mosaicPanel)
         m_mosaicPanel->setCncPosition(x, y);
@@ -2749,6 +2808,33 @@ void MainWindow::onCncStateUpdated(const QString &state)
     m_cncState = state;
 }
 
+void MainWindow::onAutofocusStarted()
+{
+    // Auto exposure changes image contrast, and the sharpness score is only
+    // comparable between frames measured under the same exposure.
+    m_autoExposureBeforeAutofocus = m_chkAutoExposure && m_chkAutoExposure->isChecked();
+    if (m_autoExposureBeforeAutofocus) {
+        m_chkAutoExposure->setChecked(false);
+        log("Autofocus: auto exposure paused so the focus score stays comparable.");
+    }
+    log("Autofocus started.");
+}
+
+void MainWindow::onAutofocusFinished(bool success, double bestZMm, double bestScore,
+                                     const QString &message)
+{
+    if (m_chkAutoExposure && m_chkAutoExposure->isChecked() != m_autoExposureBeforeAutofocus) {
+        m_chkAutoExposure->setChecked(m_autoExposureBeforeAutofocus);
+    }
+    m_autoExposureBeforeAutofocus = false;
+    log(message);
+    if (success) {
+        log(QString("Autofocus: Z=%1 mm, focus score %2")
+                .arg(bestZMm, 0, 'f', 3)
+                .arg(bestScore, 0, 'f', 1));
+    }
+}
+
 void MainWindow::onMosaicMoveRequested(double x, double y)
 {
     if (!m_cncControlPanel) return;
@@ -2796,6 +2882,9 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
     m_scanSerpentine = serpentine;
     m_scanFeedrate = feedrate;
     m_isScanning = true;
+    // The scan owns the stage, so the Z axis is not available for focusing.
+    if (m_cncControlPanel)
+        m_cncControlPanel->setAutofocusAllowed(false);
     if (m_scanPanel)
         m_scanPanel->scanStarted();
 
@@ -2818,6 +2907,7 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
     if (!setupNextScanRegion()) {
         m_isScanning = false;
         m_cncControlPanel->setStatusPollIntervalMs(100);
+        m_cncControlPanel->setAutofocusAllowed(true);
         if (m_scanPanel)
             m_scanPanel->scanFinished(false);
     }
@@ -2907,6 +2997,7 @@ void MainWindow::cancelScan()
         m_cncControlPanel->setStatusPollIntervalMs(100);
         m_cncControlPanel->sendCommand("!");
         m_cncControlPanel->stop();
+        m_cncControlPanel->setAutofocusAllowed(true);
     }
     log("Scan cancelled by user.");
     if (m_scanPanel)
@@ -2927,8 +3018,11 @@ void MainWindow::onScanFinished()
     m_isScanning = false;
     m_scanRegions.clear();
     m_scanRegionIndex = 0;
-    if (m_cncControlPanel)
+    if (m_cncControlPanel) {
         m_cncControlPanel->setStatusPollIntervalMs(100);
+        // The stage is free again now that the last region is done.
+        m_cncControlPanel->setAutofocusAllowed(true);
+    }
     log("Mosaic scan finished.");
     if (m_scanPanel)
         m_scanPanel->scanFinished(true);
@@ -3338,6 +3432,9 @@ void MainWindow::loadSettings()
         if (settings.contains("cnc_controller_port") && m_cncControlPanel)
             m_cncControlPanel->setPreferredPort(settings.value("cnc_controller_port").toString());
 
+        if (settings.contains("stage_auto_connect"))
+            m_stageAutoConnect = settings.value("stage_auto_connect").toBool(false);
+
         log("Settings loaded.");
     }
 
@@ -3382,6 +3479,14 @@ void MainWindow::loadSettings()
             envRemoteRec == "1" || envRemoteRec == "true" || envRemoteRec == "yes");
     }
 
+    // MICROSCOPE_STAGE_AUTO_CONNECT overrides the stage_auto_connect setting,
+    // so --auto-connect-stage / --no-auto-connect-stage win for a single run.
+    const QString envStageAutoConnect = qEnvironmentVariable("MICROSCOPE_STAGE_AUTO_CONNECT").trimmed().toLower();
+    if (!envStageAutoConnect.isEmpty()) {
+        m_stageAutoConnect = envStageAutoConnect == "1" || envStageAutoConnect == "true"
+                             || envStageAutoConnect == "yes";
+    }
+
     syncCameraConnectionFromUi();
     loadStageSettings();
     initMosaicPanel();
@@ -3423,6 +3528,7 @@ void MainWindow::saveSettings()
     settings["led_controller_port"] = m_ledController->getPort();
     if (m_cncControlPanel)
         settings["cnc_controller_port"] = m_cncControlPanel->currentPortName();
+    settings["stage_auto_connect"] = m_stageAutoConnect;
 
     QFile file("camera_settings.json");
     if (file.open(QIODevice::WriteOnly)) {

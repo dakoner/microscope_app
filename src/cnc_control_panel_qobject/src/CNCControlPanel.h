@@ -10,8 +10,11 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QStringList>
 #include <QList>
+#include <QVector>
+#include <limits>
 
 #include "SerialWorker.h"
 
@@ -42,6 +45,18 @@ public:
     bool connectStage(const QString &portName = QString(), int baudRate = 115200);
     void disconnectStage();
 
+    // Closed-loop autofocus.  The panel drives the Z axis and the host window
+    // feeds it one sharpness measurement per camera frame, so the objective never
+    // has to cross into the motion layer.
+    bool isAutofocusActive() const { return m_focusPhase != FocusPhase::Inactive; }
+    double lastFocusScore() const { return m_lastFocusScore; }
+    double currentZPositionMm() const { return m_lastZPosition; }
+    // The host window blocks autofocus while a mosaic scan owns the stage.
+    void setAutofocusAllowed(bool allowed);
+    // Non-positive arguments keep the values the panel's own spin boxes show.
+    bool startAutofocus(double searchRangeMm = 0.0, double coarseStepMm = 0.0);
+    void cancelAutofocus(const QString &reason = QString());
+
 signals:
     void logSignal(const QString &msg);
     void stateUpdated(const QString &state);
@@ -50,6 +65,8 @@ signals:
     void scanRowStartReady();
     void scanRowReady();
     void scanFinished();
+    void autofocusStarted();
+    void autofocusFinished(bool success, double bestZMm, double bestScore, const QString &message);
 
 public slots:
     void refreshSerialPorts();
@@ -60,6 +77,8 @@ public slots:
     void moveRight();
     void moveForward();
     void moveBack();
+    // One sharpness measurement per camera frame, pushed by the host window.
+    void submitFocusSample(double score);
 
 private slots:
     void onConnectToggled(bool checked);
@@ -76,6 +95,8 @@ private slots:
     void onZStepSizeChanged(double v);
     void onXYFeedrateChanged(int v);
     void onZFeedrateChanged(int v);
+    void onAutofocusClicked();
+    void advanceAutofocus();
 
 private:
     enum class PendingScanEvent {
@@ -85,9 +106,22 @@ private:
         ScanFinished
     };
 
+    // Move-and-measure states of the autofocus search.
+    enum class FocusPhase {
+        Inactive,
+        Move,    // a Z jog is in flight, then waiting for the settle
+        Sample   // averaging pushed sharpness measurements
+    };
+
     void setupUi();
     void parseStatus(const QString &statusStr);
     bool flushPendingScanEventIfIdle();
+    void updateAutofocusControlsEnabled();
+    void beginFocusMove();
+    void beginFocusSampleWindow();
+    void finishFocusSample();
+    void startFocusPass(int pass, double centreMm, double halfWidthMm, double stepMm);
+    void finishAutofocus(bool success, const QString &message);
 
     SerialWorker *m_serialWorker = nullptr;
     QTimer m_serialPollTimer;
@@ -128,6 +162,31 @@ private:
     double m_zStepSize = 0.01;
     int m_xyFeedrate = 500;
     int m_zFeedrate = 100;
+
+    // Autofocus
+    QPushButton *m_autofocusButton = nullptr;
+    QDoubleSpinBox *m_focusRangeInput = nullptr;
+    QDoubleSpinBox *m_focusStepInput = nullptr;
+    QLabel *m_focusScoreLabel = nullptr;
+    QTimer m_focusTimer;
+    QElapsedTimer m_focusClock;
+    FocusPhase m_focusPhase = FocusPhase::Inactive;
+    bool m_autofocusAllowed = true;
+    int m_focusPass = 0;
+    int m_focusIndex = 0;
+    QVector<double> m_focusTargets;
+    QVector<double> m_focusScores;
+    double m_focusTargetZ = 0.0;
+    double m_focusMoveWaitMs = 0.0;
+    double m_focusCoarseStepMm = 0.05;
+    double m_focusFineStepMm = 0.0125;
+    int m_focusFeedrate = 100;
+    double m_focusScoreSum = 0.0;
+    int m_focusScoreCount = 0;
+    double m_lastFocusScore = 0.0;
+    double m_focusBestZ = 0.0;
+    double m_focusBestScore = 0.0;
+    double m_lastZPosition = std::numeric_limits<double>::quiet_NaN();
 };
 
 #endif // CNCCONTROLPANEL_H
