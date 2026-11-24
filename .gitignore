@@ -8,6 +8,8 @@ models
 __pycache__
 src/microscope_app.egg-info/
 camera_settings.json
+waypoints.json
+waypoints/
 
 # Windows build (CMake + Ninja)
 build/

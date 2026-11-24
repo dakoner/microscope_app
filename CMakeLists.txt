@@ -119,6 +119,7 @@ option(MICROSCOPE_ENABLE_YOLO "Build the YOLO/TensorRT object detection worker" 
 set(MICROSCOPE_SOURCES
     "${APP_DIR}/MainWindow.cpp"
     "${APP_DIR}/FocusMetric.cpp"
+    "${APP_DIR}/WaypointPanel.cpp"
     "${APP_DIR}/microscope_app_python.cpp"
     "${SRC_DIR}/cnc_control_panel_qobject/src/CNCControlPanel.cpp"
     "${SRC_DIR}/mosaic_panel_qobject/src/MosaicWidget.cpp"
@@ -137,6 +138,7 @@ set(MICROSCOPE_SOURCES
 
 set(MICROSCOPE_HEADERS
     "${APP_DIR}/MainWindow.h"
+    "${APP_DIR}/WaypointPanel.h"
     "${SRC_DIR}/cnc_control_panel_qobject/src/CNCControlPanel.h"
     "${SRC_DIR}/mosaic_panel_qobject/src/MosaicWidget.h"
     "${SRC_DIR}/mosaic_panel_qobject/src/MosaicPanel.h"

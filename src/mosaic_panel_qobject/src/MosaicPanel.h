@@ -11,6 +11,13 @@
 
 #include "MosaicWidget.h"
 
+struct StageWaypoint {
+    QString id;
+    QString name;
+    double xMm = 0.0;
+    double yMm = 0.0;
+};
+
 class MosaicPanel : public QWidget
 {
     Q_OBJECT
@@ -29,6 +36,7 @@ public:
     // scan configuration panel through selectionsChanged().
     void setScanSelectionsMm(const QVector<QRectF> &mmRects);
     void setStageCircles(const QVector<std::tuple<double, double, double>> &circlesMm);
+    void setStageWaypoints(const QVector<StageWaypoint> &waypointsMm);
     QPixmap createPreview(const QSize &size) const;
     MosaicWidget *displayWidget() const;
 

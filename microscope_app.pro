@@ -159,6 +159,7 @@ SOURCES += \
     $$APP_DIR/main.cpp \
     $$APP_DIR/MainWindow.cpp \
     $$APP_DIR/FocusMetric.cpp \
+    $$APP_DIR/WaypointPanel.cpp \
     $$APP_DIR/microscope_app_python.cpp \
     $$SRC_DIR/cnc_control_panel_qobject/src/CNCControlPanel.cpp \
     $$SRC_DIR/mosaic_panel_qobject/src/MosaicWidget.cpp \
@@ -177,6 +178,7 @@ SOURCES += \
 HEADERS += \
     $$APP_DIR/MainWindow.h \
     $$APP_DIR/FocusMetric.h \
+    $$APP_DIR/WaypointPanel.h \
     $$SRC_DIR/cnc_control_panel_qobject/src/CNCControlPanel.h \
     $$SRC_DIR/mosaic_panel_qobject/src/MosaicWidget.h \
     $$SRC_DIR/mosaic_panel_qobject/src/MosaicPanel.h \

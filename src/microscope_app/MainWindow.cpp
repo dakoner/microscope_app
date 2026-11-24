@@ -13,6 +13,7 @@
 
 #include <QCloseEvent>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -48,6 +49,7 @@
 #include "CNCControlPanel.h"
 #include "FocusMetric.h"
 #include "LEDController.h"
+#include "WaypointPanel.h"
 #include "MosaicPanel.h"
 #include "ScanConfigPanel.h"
 #include "IntensityChart.h"
@@ -78,6 +80,25 @@ static bool looksLikeProjectRoot(const QString &path)
     return dir.exists("microscope_app.pro")
         || dir.exists("stage_settings.json")
         || dir.exists("camera_settings.json");
+}
+
+static QString resolveProjectBaseDir()
+{
+    const QString cwd = QDir::currentPath();
+    if (looksLikeProjectRoot(cwd)) {
+        return cwd;
+    }
+
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QString appParentDir = QFileInfo(appDir + "/..").absoluteFilePath();
+    if (looksLikeProjectRoot(appParentDir)) {
+        return appParentDir;
+    }
+    if (looksLikeProjectRoot(appDir)) {
+        return appDir;
+    }
+
+    return cwd;
 }
 
 static QString resolveOutputBaseDir()
@@ -650,6 +671,26 @@ MainWindow::MainWindow(QWidget *parent)
     ui->hardwareTabs->removeTab(ledIdx);
     ui->hardwareTabs->insertTab(ledIdx, m_ledController->widget(), "LED");
 
+    // Saved Waypoints / Specimen Bookmarks tab
+    m_waypointPanel = new WaypointPanel(this);
+    {
+        const QDir projectDir(resolveProjectBaseDir());
+        m_waypointPanel->setStoragePaths(projectDir.absoluteFilePath("waypoints.json"),
+                                         projectDir.absoluteFilePath("waypoints"));
+    }
+    ui->hardwareTabs->addTab(m_waypointPanel, "Waypoints");
+
+    m_actionSaveWaypoint = new QAction("Bookmark", this);
+    m_actionSaveWaypoint->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
+    m_actionSaveWaypoint->setToolTip(
+        "Save current (X, Y, Z) stage position as a specimen bookmark (Ctrl+B)");
+    if (ui->menuFile) {
+        ui->menuFile->addAction(m_actionSaveWaypoint);
+    }
+    if (ui->mainToolbar) {
+        ui->mainToolbar->addAction(m_actionSaveWaypoint);
+    }
+
 #if MICROSCOPE_ENABLE_YOLO
     // YOLO Inference Worker
     m_yoloWorker = new YOLOInferenceWorker(this);
@@ -757,6 +798,20 @@ MainWindow::MainWindow(QWidget *parent)
     // LED controller
     connect(m_ledController, &LEDController::logSignal, this, &MainWindow::log);
 
+    // Waypoint panel
+    if (m_waypointPanel) {
+        connect(m_waypointPanel, &WaypointPanel::saveCurrentRequested,
+                this, &MainWindow::onSaveWaypointRequested);
+        connect(m_waypointPanel, &WaypointPanel::updateCurrentRequested,
+                this, &MainWindow::onUpdateWaypointRequested);
+        connect(m_waypointPanel, &WaypointPanel::gotoWaypointRequested,
+                this, &MainWindow::onGotoWaypointRequested);
+        connect(m_waypointPanel, &WaypointPanel::waypointsChanged,
+                this, &MainWindow::syncWaypointsToMosaic);
+        connect(m_waypointPanel, &WaypointPanel::logSignal,
+                this, &MainWindow::log);
+    }
+
     // Initial states
     m_actionStopCamera->setEnabled(false);
     m_actionRecord->setEnabled(false);
@@ -804,6 +859,11 @@ void MainWindow::connectSignals()
     connect(m_actionHomeAndRun, &QAction::triggered, this, &MainWindow::onHomeAndRunClicked);
     connect(m_actionRuler, &QAction::toggled, this, &MainWindow::onRulerToggled);
     connect(m_actionColorPicker, &QAction::toggled, this, &MainWindow::onColorPickerToggled);
+    if (m_actionSaveWaypoint) {
+        connect(m_actionSaveWaypoint, &QAction::triggered, this, [this]() {
+            onSaveWaypointRequested(QString());
+        });
+    }
 
 #if MICROSCOPE_ENABLE_YOLO
     // YOLO Inference
@@ -2015,6 +2075,119 @@ std::string MainWindow::mcpCancelAutofocusJson()
     return mcpJsonResult(true, "Autofocus cancelled.");
 }
 
+static QJsonObject waypointToJson(const Waypoint &wp)
+{
+    QJsonObject obj;
+    obj["id"] = wp.id;
+    obj["name"] = wp.name;
+    obj["x_mm"] = wp.xMm;
+    obj["y_mm"] = wp.yMm;
+    obj["z_mm"] = wp.zMm;
+    obj["created_at"] = wp.createdAtIso;
+    obj["has_thumbnail"] = !wp.thumbnailFile.isEmpty();
+    if (!wp.thumbnailFile.isEmpty())
+        obj["thumbnail_file"] = wp.thumbnailFile;
+    return obj;
+}
+
+std::string MainWindow::mcpListWaypointsJson() const
+{
+    if (!m_waypointPanel)
+        return mcpJsonResult(false, "Waypoints panel is not available.");
+    QJsonArray arr;
+    for (const Waypoint &wp : m_waypointPanel->waypoints()) {
+        arr.append(waypointToJson(wp));
+    }
+    return mcpJsonResult(true, QString("Found %1 waypoint(s).").arg(arr.size()),
+                         QJsonObject{{"count", arr.size()}, {"waypoints", arr}});
+}
+
+std::string MainWindow::mcpSaveWaypointJson(const std::string &name)
+{
+    if (!m_waypointPanel)
+        return mcpJsonResult(false, "Waypoints panel is not available.");
+    if (!m_hasCncPosition)
+        return mcpJsonResult(false, "Cannot save waypoint: no stage position reported yet.");
+
+    const Waypoint wp = m_waypointPanel->addWaypoint(
+        QString::fromStdString(name),
+        m_currentCncXMm, m_currentCncYMm, m_currentCncZMm,
+        m_currentImage);
+    log(QString("MCP waypoint saved: '%1' (X=%2, Y=%3, Z=%4 mm)")
+            .arg(wp.name)
+            .arg(wp.xMm, 0, 'f', 3)
+            .arg(wp.yMm, 0, 'f', 3)
+            .arg(wp.zMm, 0, 'f', 3));
+    return mcpJsonResult(true, QString("Saved waypoint '%1'.").arg(wp.name),
+                         QJsonObject{{"waypoint", waypointToJson(wp)}});
+}
+
+std::string MainWindow::mcpGotoWaypointJson(const std::string &idOrName, bool includeZ)
+{
+    if (!m_waypointPanel)
+        return mcpJsonResult(false, "Waypoints panel is not available.");
+    if (!m_cncControlPanel)
+        return mcpJsonResult(false, "The CNC stage controller is unavailable.");
+    if (m_isScanning)
+        return mcpJsonResult(false, "A mosaic scan is in progress; cancel it before moving to a waypoint.");
+    if (m_cncControlPanel->isAutofocusActive())
+        return mcpJsonResult(false, "Autofocus is running; wait or cancel it before moving to a waypoint.");
+
+    const Waypoint *wp = m_waypointPanel->findWaypointByIdOrName(QString::fromStdString(idOrName));
+    if (!wp)
+        return mcpJsonResult(false, QString("Waypoint '%1' not found.").arg(QString::fromStdString(idOrName)));
+
+    if (!std::isfinite(wp->xMm) || !std::isfinite(wp->yMm) || !std::isfinite(wp->zMm))
+        return mcpJsonResult(false, "Waypoint coordinates are invalid.");
+
+    const double stageW = m_stageSettings.value("stage_width_mm").toDouble();
+    const double stageH = m_stageSettings.value("stage_height_mm").toDouble();
+    if (stageW > 0 && stageH > 0 && (wp->xMm < 0 || wp->yMm < 0 || wp->xMm > stageW || wp->yMm > stageH)) {
+        return mcpJsonResult(false, QString("Waypoint '%1' is outside the %2 x %3 mm stage area.")
+                                        .arg(wp->name).arg(stageW).arg(stageH));
+    }
+
+    if (!m_cncControlPanel->isStageConnected())
+        m_cncControlPanel->connectStage();
+    if (!m_cncControlPanel->isStageConnected())
+        return mcpJsonResult(false, "The CNC stage is not connected.");
+
+    const int xyFeed = m_cncControlPanel->feedrate();
+    const int zFeed = m_cncControlPanel->zFeedrate();
+    m_cncControlPanel->sendCommand("G90");
+    m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2 F%3")
+                                       .arg(wp->xMm, 0, 'f', 3)
+                                       .arg(wp->yMm, 0, 'f', 3)
+                                       .arg(xyFeed));
+    if (includeZ) {
+        m_cncControlPanel->sendCommand(QString("G1 Z%1 F%2")
+                                           .arg(wp->zMm, 0, 'f', 3)
+                                           .arg(zFeed));
+    }
+
+    log(QString("MCP waypoint '%1': Moving to X=%2, Y=%3%4")
+            .arg(wp->name)
+            .arg(wp->xMm, 0, 'f', 3)
+            .arg(wp->yMm, 0, 'f', 3)
+            .arg(includeZ ? QString(", Z=%1 mm").arg(wp->zMm, 0, 'f', 3) : QString(" mm (XY only)")));
+    return mcpJsonResult(true, QString("Moving to waypoint '%1'.").arg(wp->name),
+                         QJsonObject{{"waypoint", waypointToJson(*wp)},
+                                     {"include_z", includeZ},
+                                     {"xy_feedrate_mm_min", xyFeed},
+                                     {"z_feedrate_mm_min", zFeed}});
+}
+
+std::string MainWindow::mcpDeleteWaypointJson(const std::string &idOrName)
+{
+    if (!m_waypointPanel)
+        return mcpJsonResult(false, "Waypoints panel is not available.");
+    QString removedName;
+    if (!m_waypointPanel->removeWaypointByIdOrName(QString::fromStdString(idOrName), &removedName))
+        return mcpJsonResult(false, QString("Waypoint '%1' not found.").arg(QString::fromStdString(idOrName)));
+    log(QString("MCP waypoint deleted: '%1'").arg(removedName));
+    return mcpJsonResult(true, QString("Deleted waypoint '%1'.").arg(removedName));
+}
+
 // ---------- Frame pipeline ----------
 
 void MainWindow::updateFrame(QImage image, double frameTimestampSec)
@@ -2656,6 +2829,8 @@ void MainWindow::initMosaicPanel(bool forceRecreate)
     connect(m_scanPanel, &ScanConfigPanel::startScanSignal, this, &MainWindow::startScan);
     connect(m_scanPanel, &ScanConfigPanel::cancelScanSignal, this, &MainWindow::cancelScan);
     layout->addWidget(m_scanPanel);
+
+    syncWaypointsToMosaic();
 }
 
 void MainWindow::onCncPositionUpdated(double x, double y, double z)
@@ -2663,9 +2838,12 @@ void MainWindow::onCncPositionUpdated(double x, double y, double z)
     m_currentCncXMm = x;
     m_currentCncYMm = y;
     m_currentCncZMm = z;
+    m_hasCncPosition = true;
     addPoseSample(x, y, monotonicNowSec());
     if (m_mosaicPanel)
         m_mosaicPanel->setCncPosition(x, y);
+    if (m_waypointPanel)
+        m_waypointPanel->setCurrentPosition(x, y, z, true);
     if (!m_pendingScanFrames.empty())
         flushPendingScanFrames(false);
 }
@@ -2842,6 +3020,127 @@ void MainWindow::onMosaicMoveRequested(double x, double y)
     m_cncControlPanel->sendCommand(QString("G90 G1 X%1 Y%2 F%3")
                                        .arg(x, 0, 'f', 3).arg(y, 0, 'f', 3).arg(feedrate));
     log(QString("Mosaic Click: Moving to X=%1, Y=%2").arg(x, 0, 'f', 3).arg(y, 0, 'f', 3));
+}
+
+void MainWindow::onSaveWaypointRequested(const QString &name)
+{
+    if (!m_waypointPanel) return;
+    if (!m_hasCncPosition) {
+        const QString msg = QStringLiteral("Cannot save waypoint: no stage position reported yet. Connect the CNC stage first.");
+        log(msg);
+        statusBar()->showMessage(msg, 4000);
+        return;
+    }
+
+    const Waypoint wp = m_waypointPanel->addWaypoint(
+        name, m_currentCncXMm, m_currentCncYMm, m_currentCncZMm, m_currentImage);
+    const QString msg = QString("Saved waypoint '%1' at X=%2, Y=%3, Z=%4 mm.")
+                            .arg(wp.name)
+                            .arg(wp.xMm, 0, 'f', 3)
+                            .arg(wp.yMm, 0, 'f', 3)
+                            .arg(wp.zMm, 0, 'f', 3);
+    log(msg);
+    statusBar()->showMessage(msg, 4000);
+}
+
+void MainWindow::onUpdateWaypointRequested(const QString &waypointId)
+{
+    if (!m_waypointPanel) return;
+    if (!m_hasCncPosition) {
+        const QString msg = QStringLiteral("Cannot update waypoint: no stage position reported yet.");
+        log(msg);
+        statusBar()->showMessage(msg, 4000);
+        return;
+    }
+
+    const Waypoint *existing = m_waypointPanel->findWaypointByIdOrName(waypointId);
+    const QString wpName = existing ? existing->name : waypointId;
+    if (m_waypointPanel->updateWaypoint(waypointId, m_currentCncXMm, m_currentCncYMm,
+                                        m_currentCncZMm, m_currentImage)) {
+        const QString msg = QString("Updated waypoint '%1' to X=%2, Y=%3, Z=%4 mm.")
+                                .arg(wpName)
+                                .arg(m_currentCncXMm, 0, 'f', 3)
+                                .arg(m_currentCncYMm, 0, 'f', 3)
+                                .arg(m_currentCncZMm, 0, 'f', 3);
+        log(msg);
+        statusBar()->showMessage(msg, 4000);
+    }
+}
+
+void MainWindow::onGotoWaypointRequested(const QString &id, const QString &name,
+                                         double xMm, double yMm, double zMm, bool includeZ)
+{
+    Q_UNUSED(id);
+    if (!m_cncControlPanel) return;
+    if (m_isScanning) {
+        log("Cannot move to waypoint while a mosaic scan is in progress.");
+        return;
+    }
+    if (m_cncControlPanel->isAutofocusActive()) {
+        log("Cannot move to waypoint while autofocus is running.");
+        return;
+    }
+    if (!std::isfinite(xMm) || !std::isfinite(yMm) || !std::isfinite(zMm)) {
+        log(QString("Waypoint '%1' has invalid coordinates.").arg(name));
+        return;
+    }
+
+    const double stageW = m_stageSettings.value("stage_width_mm").toDouble();
+    const double stageH = m_stageSettings.value("stage_height_mm").toDouble();
+    if (stageW > 0 && stageH > 0 && (xMm < 0 || yMm < 0 || xMm > stageW || yMm > stageH)) {
+        log(QString("Waypoint '%1' is outside the %2 x %3 mm stage area.")
+                .arg(name).arg(stageW).arg(stageH));
+        return;
+    }
+
+    if (!m_cncControlPanel->isStageConnected()) {
+        m_cncControlPanel->connectStage();
+    }
+    if (!m_cncControlPanel->isStageConnected()) {
+        log("Cannot move to waypoint: CNC stage is not connected.");
+        return;
+    }
+
+    const int xyFeed = m_cncControlPanel->feedrate();
+    const int zFeed = m_cncControlPanel->zFeedrate();
+    m_cncControlPanel->sendCommand("G90");
+    m_cncControlPanel->sendCommand(QString("G1 X%1 Y%2 F%3")
+                                       .arg(xMm, 0, 'f', 3)
+                                       .arg(yMm, 0, 'f', 3)
+                                       .arg(xyFeed));
+    if (includeZ) {
+        m_cncControlPanel->sendCommand(QString("G1 Z%1 F%2")
+                                           .arg(zMm, 0, 'f', 3)
+                                           .arg(zFeed));
+    }
+
+    const QString msg = QString("Waypoint '%1': Moving to X=%2, Y=%3%4")
+                            .arg(name)
+                            .arg(xMm, 0, 'f', 3)
+                            .arg(yMm, 0, 'f', 3)
+                            .arg(includeZ ? QString(", Z=%1 mm").arg(zMm, 0, 'f', 3)
+                                          : QString(" mm (XY only)"));
+    log(msg);
+    statusBar()->showMessage(msg, 4000);
+}
+
+void MainWindow::syncWaypointsToMosaic()
+{
+    if (!m_mosaicPanel || !m_waypointPanel)
+        return;
+
+    QVector<StageWaypoint> markers;
+    const auto &waypoints = m_waypointPanel->waypoints();
+    markers.reserve(waypoints.size());
+    for (const Waypoint &wp : waypoints) {
+        StageWaypoint sw;
+        sw.id = wp.id;
+        sw.name = wp.name;
+        sw.xMm = wp.xMm;
+        sw.yMm = wp.yMm;
+        markers.append(sw);
+    }
+    m_mosaicPanel->setStageWaypoints(markers);
 }
 
 void MainWindow::onMosaicScanRequested(double xMin, double yMin, double xMax, double yMax)
@@ -3489,6 +3788,8 @@ void MainWindow::loadSettings()
 
     syncCameraConnectionFromUi();
     loadStageSettings();
+    if (m_waypointPanel)
+        m_waypointPanel->loadWaypoints();
     initMosaicPanel();
 }
 

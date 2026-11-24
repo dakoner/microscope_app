@@ -92,6 +92,21 @@ PYBIND11_MODULE(_microscope_app_cpp, m)
     m.def("mcp_cancel_autofocus_ptr", [](std::uintptr_t ptr) {
         return reinterpret_cast<MainWindow *>(ptr)->mcpCancelAutofocusJson();
     });
+    m.def("mcp_list_waypoints_ptr", [](std::uintptr_t ptr) {
+        return reinterpret_cast<MainWindow *>(ptr)->mcpListWaypointsJson();
+    });
+    m.def("mcp_save_waypoint_ptr", [](std::uintptr_t ptr, const std::string &name) {
+        return reinterpret_cast<MainWindow *>(ptr)->mcpSaveWaypointJson(name);
+    },
+    py::arg("ptr"), py::arg("name") = "");
+    m.def("mcp_goto_waypoint_ptr", [](std::uintptr_t ptr, const std::string &id_or_name, bool include_z) {
+        return reinterpret_cast<MainWindow *>(ptr)->mcpGotoWaypointJson(id_or_name, include_z);
+    },
+    py::arg("ptr"), py::arg("id_or_name"), py::arg("include_z") = true);
+    m.def("mcp_delete_waypoint_ptr", [](std::uintptr_t ptr, const std::string &id_or_name) {
+        return reinterpret_cast<MainWindow *>(ptr)->mcpDeleteWaypointJson(id_or_name);
+    },
+    py::arg("ptr"), py::arg("id_or_name"));
 
     // Headless Camera + Stage Server bridge
     m.def("create_camera_server_ptr", [](const std::string &bindAddress,
