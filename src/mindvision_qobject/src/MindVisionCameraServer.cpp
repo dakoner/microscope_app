@@ -419,6 +419,7 @@ public:
         QJsonObject ev;
         ev["event"] = "stage_log";
         ev["message"] = msg;
+        ev["timestamp_ms"] = QDateTime::currentMSecsSinceEpoch();
         broadcastStageEvent(ev);
     }
 

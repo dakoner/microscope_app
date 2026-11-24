@@ -23,6 +23,7 @@ public:
     ~CNCControlPanel() override;
 
     void stop();
+    void setStatusPollIntervalMs(int intervalMs);
     int feedrate() const { return m_xyFeedrate; }
 
     // Remote stage mode (connects to camera_server)
@@ -91,6 +92,7 @@ private:
     SerialWorker *m_serialWorker = nullptr;
     QTimer m_serialPollTimer;
     QTimer m_statusPollTimer;
+    int m_statusPollIntervalMs = 100;
 
     QComboBox *m_serialPortCombo = nullptr;
     QPushButton *m_refreshButton = nullptr;

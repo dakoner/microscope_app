@@ -6,6 +6,7 @@
 #include <QFormLayout>
 #include <QSerialPortInfo>
 #include <QRegularExpression>
+#include <algorithm>
 
 static QString normalizeRxContent(const QString &content)
 {
@@ -450,7 +451,7 @@ void CNCControlPanel::onSerialStatusChanged(bool connected)
         m_lastState.clear();
         m_statusPollTimer.stop();
     } else {
-        m_statusPollTimer.start(100);
+        m_statusPollTimer.start(m_statusPollIntervalMs);
     }
 
     for (auto *btn : {m_forwardButton, m_backButton, m_leftButton, m_rightButton,
@@ -606,6 +607,14 @@ void CNCControlPanel::sendConsoleCommand()
     if (!cmd.isEmpty()) {
         sendCommand(cmd);
         m_commandInput->clear();
+    }
+}
+
+void CNCControlPanel::setStatusPollIntervalMs(int intervalMs)
+{
+    m_statusPollIntervalMs = std::max(15, intervalMs);
+    if (m_statusPollTimer.isActive()) {
+        m_statusPollTimer.setInterval(m_statusPollIntervalMs);
     }
 }
 

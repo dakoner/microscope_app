@@ -723,8 +723,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Camera frame signal – connect to frameReady
     connect(m_camera, &MindVisionCamera::frameReady, this,
-            [this](QImage image, qint64 /*ts*/) {
-        const double frameTimestampSec = monotonicNowSec();
+            [this](QImage image, qint64 ts) {
+        const double frameTimestampSec = resolveFrameTimestampSec(ts);
         ++m_framesReceivedCount;
         updateFrameStatsLabel();
 
@@ -2026,27 +2026,27 @@ void MainWindow::updateFrame(QImage image, double frameTimestampSec)
 
     double poseX = m_currentCncXMm;
     double poseY = m_currentCncYMm;
-    interpolatedPoseAt(frameTimestampSec, poseX, poseY);
-
-    if (m_scanRecordingActive && m_scanCaptureEnabled) {
-        appendScanFrameMetadata(image.width(), image.height(), frameTimestampSec, poseX, poseY);
-    }
+    interpolatedPoseAt(frameTimestampSec - m_scanPoseLagSec, poseX, poseY);
 
     const bool shouldUpdateMosaicOverlay =
         m_mosaicPanel &&
         m_cncState != "Home";
-    // During scan acquisition, only stitch frames that are inside the active row recording window.
-    const bool shouldStitchMosaicFrame =
-        shouldUpdateMosaicOverlay &&
-        (!m_isScanning || (m_scanRecordingActive && m_scanCaptureEnabled));
 
-    if (shouldUpdateMosaicOverlay) {
+    if (m_isScanning && m_scanRecordingActive && m_scanCaptureEnabled) {
+        // Keep the live viewport overlay responsive while deferring metadata and
+        // composite stitching until a newer CNC pose brackets frameTimestampSec.
+        if (shouldUpdateMosaicOverlay) {
+            m_mosaicPanel->updateMosaic(image, poseX, poseY, false);
+        }
+        m_pendingScanFrames.push_back({image, frameTimestampSec, m_scanCaptureSegmentNumber});
+        flushPendingScanFrames(false);
+    } else if (shouldUpdateMosaicOverlay) {
+        const bool shouldStitchMosaicFrame = !m_isScanning;
         m_mosaicPanel->updateMosaic(image, poseX, poseY, shouldStitchMosaicFrame);
         if (shouldStitchMosaicFrame) {
             m_lastMosaicUpdateTime = nowSec();
             ++m_framesWrittenToMosaicCount;
             updateFrameStatsLabel();
-            updateScanCompositeBuffer(image, poseX, poseY);
         }
         if (m_mosaicPipLabel) {
             QPixmap mosaicPixmap = m_mosaicPanel->createPreview(m_mosaicPipLabel->size());
@@ -2607,11 +2607,85 @@ void MainWindow::onCncPositionUpdated(double x, double y, double /*z*/)
     addPoseSample(x, y, monotonicNowSec());
     if (m_mosaicPanel)
         m_mosaicPanel->setCncPosition(x, y);
+    if (!m_pendingScanFrames.empty())
+        flushPendingScanFrames(false);
 }
 
 double MainWindow::monotonicNowSec() const
 {
     return static_cast<double>(m_poseClock.nsecsElapsed()) * 1e-9;
+}
+
+double MainWindow::resolveFrameTimestampSec(qint64 sourceTimestampMs)
+{
+    const double arrivalSec = monotonicNowSec();
+    if (sourceTimestampMs <= 0) {
+        return arrivalSec;
+    }
+
+    const double srcSec = static_cast<double>(sourceTimestampMs) * 1e-3;
+    const double sampleOffset = arrivalSec - srcSec;
+    if (!m_hasFrameClockOffset || std::abs(sampleOffset - m_frameClockOffsetSec) > 2.0) {
+        m_frameClockOffsetSec = sampleOffset;
+        m_hasFrameClockOffset = true;
+    } else if (sampleOffset < m_frameClockOffsetSec) {
+        // Track minimum (arrival - capture) so variable TCP/JPEG/UI jitter is removed
+        // without depending on host clocks being synchronized.
+        m_frameClockOffsetSec = sampleOffset;
+    } else {
+        // Gentle upward leak to absorb slow clock drift between camera host and GUI.
+        m_frameClockOffsetSec += 0.0005 * (sampleOffset - m_frameClockOffsetSec);
+    }
+
+    return std::min(srcSec + m_frameClockOffsetSec, arrivalSec);
+}
+
+void MainWindow::flushPendingScanFrames(bool forceAll)
+{
+    if (m_pendingScanFrames.empty())
+        return;
+
+    const double nowMonotonic = monotonicNowSec();
+    bool stitchedAny = false;
+
+    while (!m_pendingScanFrames.empty()) {
+        const PendingScanFrame &front = m_pendingScanFrames.front();
+        const double targetPoseSec = front.frameTimestampSec - m_scanPoseLagSec;
+        const bool hasBracketingPose =
+            !m_poseSamples.empty() && m_poseSamples.back().timestampSec >= targetPoseSec;
+        const bool timedOut = (nowMonotonic - front.frameTimestampSec) > 0.5;
+
+        if (!forceAll && !hasBracketingPose && !timedOut)
+            break;
+
+        PendingScanFrame item = std::move(m_pendingScanFrames.front());
+        m_pendingScanFrames.pop_front();
+
+        double poseX = m_currentCncXMm;
+        double poseY = m_currentCncYMm;
+        interpolatedPoseAt(item.frameTimestampSec - m_scanPoseLagSec, poseX, poseY);
+
+        appendScanFrameMetadata(item.image.width(), item.image.height(),
+                                item.frameTimestampSec, poseX, poseY, item.segmentNumber);
+
+        if (m_mosaicPanel) {
+            m_mosaicPanel->updateMosaic(item.image, poseX, poseY, true);
+        }
+        updateScanCompositeBuffer(item.image, poseX, poseY);
+        m_lastMosaicUpdateTime = nowSec();
+        ++m_framesWrittenToMosaicCount;
+        stitchedAny = true;
+    }
+
+    if (stitchedAny) {
+        updateFrameStatsLabel();
+        if (m_mosaicPanel && m_mosaicPipLabel) {
+            QPixmap mosaicPixmap = m_mosaicPanel->createPreview(m_mosaicPipLabel->size());
+            if (!mosaicPixmap.isNull()) {
+                m_mosaicPipLabel->setPixmap(mosaicPixmap);
+            }
+        }
+    }
 }
 
 void MainWindow::addPoseSample(double x, double y, double timestampSec)
@@ -2738,10 +2812,12 @@ void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
     m_scanFovYMm = orientedH / scanScaleYPxPerMm();
     m_scanStepX = m_scanFovXMm * 0.75;
 
+    m_cncControlPanel->setStatusPollIntervalMs(25);
     m_cncControlPanel->sendCommand("G90");
     m_cncControlPanel->sendCommand(QString("F%1").arg(m_scanFeedrate));
     if (!setupNextScanRegion()) {
         m_isScanning = false;
+        m_cncControlPanel->setStatusPollIntervalMs(100);
         if (m_scanPanel)
             m_scanPanel->scanFinished(false);
     }
@@ -2809,6 +2885,7 @@ void MainWindow::onScanRowStartReady()
 void MainWindow::onRowFinished()
 {
     if (!m_isScanning) return;
+    flushPendingScanFrames(true);
     m_scanCaptureEnabled = false;
     m_scanCaptureSegmentNumber = 0;
     m_scanCurrentRow++;
@@ -2821,11 +2898,13 @@ void MainWindow::cancelScan()
 {
     if (!m_isScanning) return;
     m_isScanning = false;
+    m_pendingScanFrames.clear();
     stopScanRecording(false);
     m_scanRegions.clear();
     m_scanRegionIndex = 0;
     resetScanCompositeBuffer();
     if (m_cncControlPanel) {
+        m_cncControlPanel->setStatusPollIntervalMs(100);
         m_cncControlPanel->sendCommand("!");
         m_cncControlPanel->stop();
     }
@@ -2837,6 +2916,7 @@ void MainWindow::cancelScan()
 void MainWindow::onScanFinished()
 {
     if (!m_isScanning) return;
+    flushPendingScanFrames(true);
     stopScanRecording(true);
     saveScanCompositeBuffer();
     resetScanCompositeBuffer();
@@ -2847,6 +2927,8 @@ void MainWindow::onScanFinished()
     m_isScanning = false;
     m_scanRegions.clear();
     m_scanRegionIndex = 0;
+    if (m_cncControlPanel)
+        m_cncControlPanel->setStatusPollIntervalMs(100);
     log("Mosaic scan finished.");
     if (m_scanPanel)
         m_scanPanel->scanFinished(true);
@@ -2874,6 +2956,7 @@ bool MainWindow::setupNextScanRegion()
     m_scanCurrentX = m_scanXMin + (m_scanFovXMm / 2.0);
     m_scanIsFirstStrip = true;
 
+    m_pendingScanFrames.clear();
     resetScanCompositeBuffer();
     initializeScanCompositeBuffer(imgW, imgH);
     m_scanSessionTimestamp = QDateTime::currentSecsSinceEpoch();
@@ -3079,11 +3162,12 @@ void MainWindow::writeScanMetadataFile(int imageWidth, int imageHeight, bool com
 }
 
 void MainWindow::appendScanFrameMetadata(int imageWidth, int imageHeight,
-                                         double frameTimestampSec, double stageX, double stageY)
+                                         double frameTimestampSec, double stageX, double stageY,
+                                         int segmentNumber)
 {
     ScanFrameMetadata entry;
     entry.frameIndex = static_cast<int>(m_scanFrameMetadata.size());
-    entry.segmentNumber = m_scanCaptureSegmentNumber;
+    entry.segmentNumber = segmentNumber >= 0 ? segmentNumber : m_scanCaptureSegmentNumber;
     entry.imageWidthPx = imageWidth;
     entry.imageHeightPx = imageHeight;
     entry.frameTimestampSec = frameTimestampSec;
@@ -3245,6 +3329,8 @@ void MainWindow::loadSettings()
             if (rotation == 0 || rotation == 90 || rotation == 180 || rotation == 270)
                 m_scanCameraRotationDeg = rotation;
         }
+        if (settings.contains("scan_pose_lag_ms"))
+            m_scanPoseLagSec = settings.value("scan_pose_lag_ms").toDouble(0.0) * 1e-3;
 
         if (settings.contains("led_controller_port"))
             m_ledController->setPort(settings.value("led_controller_port").toString());

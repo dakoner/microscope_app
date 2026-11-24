@@ -183,8 +183,10 @@ private:
     void stopScanRecording(bool completed);
     bool setupNextScanRegion();
     double monotonicNowSec() const;
+    double resolveFrameTimestampSec(qint64 sourceTimestampMs);
     void addPoseSample(double x, double y, double timestampSec);
     bool interpolatedPoseAt(double timestampSec, double &xOut, double &yOut) const;
+    void flushPendingScanFrames(bool forceAll);
     void syncUi();
     void updateSliderFromTime(double current, double minVal, double maxVal);
     void refreshVideoLabel();
@@ -202,7 +204,8 @@ private:
     void loadStageSettings();
     void writeScanMetadataFile(int imageWidth, int imageHeight, bool completed);
     void appendScanFrameMetadata(int imageWidth, int imageHeight,
-                                 double frameTimestampSec, double stageX, double stageY);
+                                 double frameTimestampSec, double stageX, double stageY,
+                                 int segmentNumber = -1);
     void initializeScanCompositeBuffer(int imageWidth, int imageHeight);
     void resetScanCompositeBuffer();
     void updateScanCompositeBuffer(const QImage &image, double stageXmm, double stageYmm);
@@ -303,8 +306,17 @@ private:
         double xMm = 0.0;
         double yMm = 0.0;
     };
+    struct PendingScanFrame {
+        QImage image;
+        double frameTimestampSec = 0.0;
+        int segmentNumber = 0;
+    };
     QElapsedTimer m_poseClock;
     std::deque<PoseSample> m_poseSamples;
+    std::deque<PendingScanFrame> m_pendingScanFrames;
+    bool m_hasFrameClockOffset = false;
+    double m_frameClockOffsetSec = 0.0;
+    double m_scanPoseLagSec = 0.0;
 
 #if MICROSCOPE_ENABLE_YOLO
     // YOLO Inference / Tardigrade tracking

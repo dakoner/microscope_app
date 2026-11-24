@@ -9,8 +9,8 @@
     "remote_camera_port": 8766,
     "remote_jpeg_quality": 85,
     "remote_record_on_server": false,
-    "ruler_calibration": 400,
+    "ruler_calibration": 838.0233490152968,
     "scan_camera_rotation": 0,
-    "scan_scale_x_px_per_mm": 800,
-    "scan_scale_y_px_per_mm": 870
+    "scan_scale_x_px_per_mm": 0,
+    "scan_scale_y_px_per_mm": 0
 }
