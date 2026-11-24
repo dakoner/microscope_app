@@ -33,6 +33,8 @@ not collide:
   - `set_object_detection` — enable/disable the YOLO overlay
   - `start_scan` (requires `confirm=true`) — run the GUI's mosaic scan over a rectangle
   - `cancel_scan` — cancel that scan
+  - `autofocus` (requires `confirm=true`) / `cancel_autofocus` — closed-loop Z autofocus
+  - `list_waypoints` / `save_waypoint` / `goto_waypoint` (requires `confirm=true`) / `delete_waypoint` — manage saved `(X, Y, Z)` specimen bookmarks
 
 ### 3. GUI app in local mode (`microscope-app`)
 When the GUI drives local hardware directly (no `camera_server`), it starts in

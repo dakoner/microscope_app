@@ -36,6 +36,7 @@ class MindVisionCamera;
 class VideoThread;
 class CNCControlPanel;
 class LEDController;
+class WaypointPanel;
 class MosaicPanel;
 class IntensityChart;
 class HistogramWidget;
@@ -88,6 +89,11 @@ public:
     // Closed-loop autofocus over the Z axis.
     std::string mcpStartAutofocusJson(double rangeMm, double stepMm);
     std::string mcpCancelAutofocusJson();
+    // Saved waypoints / specimen bookmarks.
+    std::string mcpListWaypointsJson() const;
+    std::string mcpSaveWaypointJson(const std::string &name);
+    std::string mcpGotoWaypointJson(const std::string &idOrName, bool includeZ);
+    std::string mcpDeleteWaypointJson(const std::string &idOrName);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -174,6 +180,13 @@ private slots:
     void onAutofocusStarted();
     void onAutofocusFinished(bool success, double bestZMm, double bestScore, const QString &message);
 
+    // Saved waypoints / specimen bookmarks
+    void onSaveWaypointRequested(const QString &name);
+    void onUpdateWaypointRequested(const QString &waypointId);
+    void onGotoWaypointRequested(const QString &id, const QString &name,
+                                 double xMm, double yMm, double zMm, bool includeZ);
+    void syncWaypointsToMosaic();
+
     void log(const QString &message) const;
 
 private:
@@ -242,6 +255,7 @@ private:
     // Hardware
     CNCControlPanel *m_cncControlPanel = nullptr;
     LEDController *m_ledController = nullptr;
+    WaypointPanel *m_waypointPanel = nullptr;
 
     // Mosaic / Scan
     MosaicPanel *m_mosaicPanel = nullptr;
@@ -250,6 +264,7 @@ private:
     double m_currentCncXMm = 0.0;
     double m_currentCncYMm = 0.0;
     double m_currentCncZMm = 0.0;
+    bool m_hasCncPosition = false;
     double m_lastFocusSampleTime = 0.0;
     // Auto exposure is paused while autofocus searches, because a changing
     // exposure changes the sharpness score and would mislead the search.
@@ -458,6 +473,7 @@ private:
     QAction *m_actionRuler = nullptr;
     QAction *m_actionColorPicker = nullptr;
     QAction *m_actionHomeAndRun = nullptr;
+    QAction *m_actionSaveWaypoint = nullptr;
 };
 
 #endif // MAINWINDOW_H

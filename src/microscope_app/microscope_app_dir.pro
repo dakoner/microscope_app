@@ -20,10 +20,14 @@ INCLUDEPATH += . \
 
 SOURCES += \
     main.cpp \
-    MainWindow.cpp
+    MainWindow.cpp \
+    FocusMetric.cpp \
+    WaypointPanel.cpp
 
 HEADERS += \
-    MainWindow.h
+    MainWindow.h \
+    FocusMetric.h \
+    WaypointPanel.h
 
 FORMS += \
     MainWindow.ui

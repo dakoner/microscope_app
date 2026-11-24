@@ -28,6 +28,7 @@ public:
     void stop();
     void setStatusPollIntervalMs(int intervalMs);
     int feedrate() const { return m_xyFeedrate; }
+    int zFeedrate() const { return m_zFeedrate; }
 
     // Remote stage mode (connects to camera_server)
     void setRemoteMode(bool remote);

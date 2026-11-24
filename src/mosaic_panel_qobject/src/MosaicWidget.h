@@ -8,6 +8,13 @@
 #include <QRectF>
 #include <QScrollBar>
 #include <QPair>
+#include <QString>
+
+struct MosaicWaypointMarker {
+    QString id;
+    QString name;
+    QPointF imagePos;
+};
 
 class MosaicWidget : public QWidget
 {
@@ -22,6 +29,7 @@ public:
     void setCurrentFrameRect(const QRectF &rect);
     void setCncPosition(double xMm, double yMm);
     void setOverlayCircles(const QVector<QPair<QPointF, double>> &circles);
+    void setWaypoints(const QVector<MosaicWaypointMarker> &waypoints);
     // Replaces the scan selections with mosaic-image rectangles.
     void setSelections(const QVector<QRectF> &imageRects);
     QVector<QRectF> selections() const { return m_selectedRects; }
@@ -79,6 +87,7 @@ private:
     QPointF m_cncImagePos;  // CNC position in mosaic image coords
     QVector<QRectF> m_selectedRects;
     QVector<QPair<QPointF, double>> m_overlayCircles;
+    QVector<MosaicWaypointMarker> m_waypoints;
 
     QPointF m_selStartPos;
     QPointF m_selCurrentPos;

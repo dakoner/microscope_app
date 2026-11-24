@@ -73,6 +73,12 @@ void MosaicWidget::setOverlayCircles(const QVector<QPair<QPointF, double>> &circ
     update();
 }
 
+void MosaicWidget::setWaypoints(const QVector<MosaicWaypointMarker> &waypoints)
+{
+    m_waypoints = waypoints;
+    update();
+}
+
 void MosaicWidget::setSelections(const QVector<QRectF> &imageRects)
 {
     const QRectF imageBounds(0, 0, m_totalWidth, m_totalHeight);
@@ -311,6 +317,13 @@ QPixmap MosaicWidget::createViewportPreview(const QSize &size) const
         painter.drawEllipse(center, radius, radius);
     }
 
+    for (const auto &wp : m_waypoints) {
+        const double r = 4.0 / scale;
+        painter.setPen(QPen(QColor(10, 25, 32), 1.5 / scale));
+        painter.setBrush(QColor(0, 229, 255));
+        painter.drawEllipse(wp.imagePos, r, r);
+    }
+
     if (m_gridWidth > 0 && m_gridHeight > 0) {
         QPen pen(QColor(128, 128, 128, 100), 1.0 / scale);
         painter.setPen(pen);
@@ -465,6 +478,46 @@ void MosaicWidget::paintEvent(QPaintEvent *)
         }
 
         painter.restore();
+
+        // Waypoint markers drawn in widget coordinates so pins and labels stay crisp at any zoom.
+        if (!m_waypoints.isEmpty()) {
+            painter.save();
+            QFont labelFont = painter.font();
+            labelFont.setPointSize(8);
+            labelFont.setBold(true);
+            painter.setFont(labelFont);
+            const QFontMetrics fm(labelFont);
+            const QRect paddedBounds = rect().adjusted(-60, -60, 60, 60);
+
+            for (const auto &wp : m_waypoints) {
+                const QPointF p = imageToWidgetCoords(wp.imagePos);
+                if (!paddedBounds.contains(p.toPoint()))
+                    continue;
+
+                // Crosshair + cyan pin
+                painter.setPen(QPen(QColor(0, 229, 255, 220), 1.5));
+                painter.drawLine(QPointF(p.x() - 8, p.y()), QPointF(p.x() + 8, p.y()));
+                painter.drawLine(QPointF(p.x(), p.y() - 8), QPointF(p.x(), p.y() + 8));
+
+                painter.setPen(QPen(QColor(10, 25, 32), 1.5));
+                painter.setBrush(QColor(0, 229, 255));
+                painter.drawEllipse(p, 4.5, 4.5);
+
+                if (!wp.name.isEmpty()) {
+                    const QString label = wp.name;
+                    const int textW = fm.horizontalAdvance(label);
+                    const int textH = fm.height();
+                    const QRectF tagRect(p.x() + 9, p.y() - textH / 2.0 - 2.0,
+                                         textW + 8, textH + 4);
+                    painter.setPen(QPen(QColor(0, 229, 255, 180), 1));
+                    painter.setBrush(QColor(15, 23, 30, 200));
+                    painter.drawRoundedRect(tagRect, 3, 3);
+                    painter.setPen(Qt::white);
+                    painter.drawText(tagRect, Qt::AlignCenter, label);
+                }
+            }
+            painter.restore();
+        }
     }
 
     drawAxes(painter);

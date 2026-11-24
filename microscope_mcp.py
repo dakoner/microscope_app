@@ -135,6 +135,10 @@ class QtMicroscopeBridge(QObject):
                 "cancel_scan": lambda: self._native.mcp_cancel_scan_ptr(self._target_ptr),
                 "start_autofocus": lambda: self._native.mcp_start_autofocus_ptr(self._target_ptr, *args),
                 "cancel_autofocus": lambda: self._native.mcp_cancel_autofocus_ptr(self._target_ptr),
+                "list_waypoints": lambda: self._native.mcp_list_waypoints_ptr(self._target_ptr),
+                "save_waypoint": lambda: self._native.mcp_save_waypoint_ptr(self._target_ptr, *args),
+                "goto_waypoint": lambda: self._native.mcp_goto_waypoint_ptr(self._target_ptr, *args),
+                "delete_waypoint": lambda: self._native.mcp_delete_waypoint_ptr(self._target_ptr, *args),
             }
         try:
             response = methods[operation]()
@@ -326,6 +330,38 @@ def _register_app_tools(server: Any, bridge: QtMicroscopeBridge, *, include_app_
         def cancel_autofocus() -> dict[str, Any]:
             """Stop a running autofocus search where the stage currently is."""
             return bridge.call("cancel_autofocus")
+
+        @server.tool()
+        def list_waypoints() -> dict[str, Any]:
+            """List saved specimen waypoints / bookmarks with their (X, Y, Z) coordinates."""
+            return bridge.call("list_waypoints")
+
+        @server.tool()
+        def save_waypoint(name: str = "") -> dict[str, Any]:
+            """Save the current (X, Y, Z) stage position and camera thumbnail as a named waypoint."""
+            return bridge.call("save_waypoint", name)
+
+        @server.tool()
+        def goto_waypoint(
+            name_or_id: str,
+            include_z: bool = True,
+            confirm: bool = False,
+        ) -> dict[str, Any]:
+            """Move the stage to a saved waypoint by name or ID after user confirmation."""
+            if not confirm:
+                return {
+                    "ok": False,
+                    "message": (
+                        "Returning to a waypoint moves the stage. Explain the target waypoint "
+                        "and call again with confirm=true only after the user confirms it."
+                    ),
+                }
+            return bridge.call("goto_waypoint", name_or_id, bool(include_z))
+
+        @server.tool()
+        def delete_waypoint(name_or_id: str) -> dict[str, Any]:
+            """Delete a saved waypoint by name or ID."""
+            return bridge.call("delete_waypoint", name_or_id)
 
 
 def create_server(

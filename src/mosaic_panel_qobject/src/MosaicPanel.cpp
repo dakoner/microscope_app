@@ -96,6 +96,24 @@ void MosaicPanel::setStageCircles(const QVector<std::tuple<double, double, doubl
     m_displayWidget->setOverlayCircles(px);
 }
 
+void MosaicPanel::setStageWaypoints(const QVector<StageWaypoint> &waypointsMm)
+{
+    if (!m_displayWidget || m_calibrationPxPerMm <= 0)
+        return;
+
+    const double scale = m_calibrationPxPerMm * SCALE_FACTOR;
+    QVector<MosaicWaypointMarker> markers;
+    markers.reserve(waypointsMm.size());
+    for (const auto &wp : waypointsMm) {
+        MosaicWaypointMarker m;
+        m.id = wp.id;
+        m.name = wp.name;
+        m.imagePos = QPointF(wp.xMm * scale, wp.yMm * scale);
+        markers.append(m);
+    }
+    m_displayWidget->setWaypoints(markers);
+}
+
 MosaicWidget *MosaicPanel::displayWidget() const
 {
     return m_displayWidget;
