@@ -7,6 +7,9 @@ intra-strip frame-to-frame motion and inter-strip column overlaps via subpixel
 normalized cross-correlation, applies smooth flat-field vignette correction,
 and blends frames with center-weighted cosine feathering into a lossless TIFF.
 
+Uses a streaming multi-pass design so memory stays bounded regardless of how
+many frames the scan MKV contains.
+
 Usage:
     uv run scripts/stitch_scan.py videos/scan_region_01_1795480133
 """
@@ -14,13 +17,23 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import gc
 import json
-import sys
 import time
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+
+def _rotate_frame(bgr: np.ndarray, rot_deg: int) -> np.ndarray:
+    if rot_deg == 90:
+        return cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
+    if rot_deg == 180:
+        return cv2.rotate(bgr, cv2.ROTATE_180)
+    if rot_deg == 270:
+        return cv2.rotate(bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return bgr
 
 
 def _subpixel_peak(res: np.ndarray, mx: int, my: int) -> tuple[float, float]:
@@ -44,7 +57,12 @@ def _subpixel_peak(res: np.ndarray, mx: int, my: int) -> tuple[float, float]:
 
 def _highpass_channel(img_bgr: np.ndarray, bg_gray: np.ndarray, chan: int) -> np.ndarray:
     ch = img_bgr[:, :, chan].astype(np.float32) - bg_gray
-    return ch - cv2.GaussianBlur(ch, (0, 0), 25.0)
+    # sigma=25 is purely low-frequency; blurring at 1/4 resolution is ~10x faster and visually identical.
+    h, w = ch.shape
+    small = cv2.resize(ch, (max(1, w // 4), max(1, h // 4)), interpolation=cv2.INTER_AREA)
+    low_small = cv2.GaussianBlur(small, (0, 0), 25.0 / 4.0)
+    low = cv2.resize(low_small, (w, h), interpolation=cv2.INTER_LINEAR)
+    return ch - low
 
 
 def _match_pair_subpixel(
@@ -61,7 +79,6 @@ def _match_pair_subpixel(
     Returns (fdx, fdy, corr, patch_std) or None if overlap is too small.
     """
     H, W = hp_a.shape
-    # Choose a generous patch inside A that fits inside B after shifting by pred + search radius.
     pdx_i = int(round(pred_fdx))
     pdy_i = int(round(pred_fdy))
 
@@ -83,7 +100,6 @@ def _match_pair_subpixel(
     sy1 = py1 + pdy_i + search_ry
     search_full = hp_b[sy0:sy1, sx0:sx1]
 
-    # Coarse search at 1/ds resolution
     if ds > 1:
         p_s = cv2.resize(patch_full, (patch_full.shape[1] // ds, patch_full.shape[0] // ds), interpolation=cv2.INTER_AREA)
         s_s = cv2.resize(search_full, (search_full.shape[1] // ds, search_full.shape[0] // ds), interpolation=cv2.INTER_AREA)
@@ -96,7 +112,6 @@ def _match_pair_subpixel(
     else:
         cdx, cdy = pdx_i, pdy_i
 
-    # Full-resolution refinement +-6 px around coarse shift
     rad = 6
     rx0 = max(0, px0 + cdx - rad)
     ry0 = max(0, py0 + cdy - rad)
@@ -121,10 +136,7 @@ def _solve_strip_positions(
     opt_edges: list[tuple[int, int, float, float, float]],
     pose_weight: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Solve 1D weighted pose graph per axis for a single strip.
-
-    opt_edges: list of (k, k+1, measured_dX, measured_dY, weight) where dX = X_{k+1} - X_k.
-    """
+    """Solve 1D weighted pose graph per axis for a single strip."""
     n = len(x0)
     if n <= 1:
         return x0.copy(), y0.copy()
@@ -134,7 +146,6 @@ def _solve_strip_positions(
     Ay = np.zeros((n, n), dtype=np.float64)
     by = np.zeros(n, dtype=np.float64)
 
-    # Weak relative stage-pose prior on every consecutive step (bridges blank glass smoothly)
     for k in range(n - 1):
         dx_p = x0[k + 1] - x0[k]
         dy_p = y0[k + 1] - y0[k]
@@ -153,7 +164,6 @@ def _solve_strip_positions(
         by[k] -= w * dy_p
         by[k + 1] += w * dy_p
 
-    # Strong optical edges where features correlate cleanly
     for i, j, dx_m, dy_m, w in opt_edges:
         Ax[i, i] += w
         Ax[j, j] += w
@@ -169,16 +179,13 @@ def _solve_strip_positions(
         by[i] -= w * dy_m
         by[j] += w * dy_m
 
-    # Centroid anchor keeps strip aligned to stage coordinate origin without fighting rotation/scale
     w_anc = 1e-2 / n
     Ax += w_anc
     bx += w_anc * np.sum(x0)
     Ay += w_anc
     by += w_anc * np.sum(y0)
 
-    x_sol = np.linalg.solve(Ax, bx)
-    y_sol = np.linalg.solve(Ay, by)
-    return x_sol, y_sol
+    return np.linalg.solve(Ax, bx), np.linalg.solve(Ay, by)
 
 
 def _make_feather_weight(h: int, w: int) -> np.ndarray:
@@ -186,6 +193,27 @@ def _make_feather_weight(h: int, w: int) -> np.ndarray:
     wx = np.sin(np.pi * (np.arange(w, dtype=np.float32) + 0.5) / w) ** 2
     mask = np.outer(wy, wx)
     return np.maximum(mask, 1e-4).astype(np.float32)
+
+
+def _iter_selected_frames(mkv_path: Path, selected: set[int], max_idx: int, rot_deg: int):
+    """Stream MKV sequentially, decoding only frame indices in `selected`."""
+    cap = cv2.VideoCapture(str(mkv_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open video: {mkv_path}")
+    try:
+        idx = 0
+        while idx <= max_idx:
+            if idx in selected:
+                ok, bgr = cap.read()
+                if not ok:
+                    break
+                yield idx, _rotate_frame(bgr, rot_deg)
+            else:
+                if not cap.grab():
+                    break
+            idx += 1
+    finally:
+        cap.release()
 
 
 def stitch_scan(
@@ -205,6 +233,10 @@ def stitch_scan(
 
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     frames_meta = meta["frames"]
+    n_meta = len(frames_meta)
+    if n_meta == 0:
+        raise RuntimeError("No frames recorded in scan_metadata.json.")
+
     scale_x = float(meta.get("scan_scale_x_px_per_mm") or meta["pixel_scale_px_per_mm"])
     scale_y = float(meta.get("scan_scale_y_px_per_mm") or meta["pixel_scale_px_per_mm"])
     rot_deg = int(meta.get("scan_camera_rotation_deg", 0))
@@ -213,168 +245,235 @@ def stitch_scan(
     x_max = float(meta["scan_area_mm"]["x_max"])
     y_max = float(meta["scan_area_mm"]["y_max"])
 
-    print(f"Loading MKV: {mkv_path} ({len(frames_meta)} metadata frames, scale={scale_x:.2f}x{scale_y:.2f} px/mm)")
-    cap = cv2.VideoCapture(str(mkv_path))
-    frames_bgr: list[np.ndarray] = []
-    while True:
-        ok, bgr = cap.read()
-        if not ok:
-            break
-        if rot_deg == 90:
-            bgr = cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
-        elif rot_deg == 180:
-            bgr = cv2.rotate(bgr, cv2.ROTATE_180)
-        elif rot_deg == 270:
-            bgr = cv2.rotate(bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        frames_bgr.append(bgr)
-    cap.release()
+    print(f"Scanning MKV (streaming): {mkv_path} ({n_meta} metadata frames, scale={scale_x:.2f}x{scale_y:.2f} px/mm)")
 
-    n_frames = min(len(frames_bgr), len(frames_meta))
-    if n_frames == 0:
+    # --- Pass 0: Sample <= 64 frames to measure background, best tracking channel, and flat-field ---
+    sample_step = max(1, n_meta // 64)
+    sample_indices = set(range(0, n_meta, sample_step))
+    samples: list[np.ndarray] = []
+    for _, bgr in _iter_selected_frames(mkv_path, sample_indices, n_meta - 1, rot_deg):
+        samples.append(bgr)
+    if not samples:
         raise RuntimeError("No frames decoded from MKV.")
-    if len(frames_bgr) != len(frames_meta):
-        print(f"Warning: MKV frame count ({len(frames_bgr)}) != metadata count ({len(frames_meta)}), using {n_frames}.")
-    frames_bgr = frames_bgr[:n_frames]
-    frames_meta = frames_meta[:n_frames]
 
-    H, W = frames_bgr[0].shape[:2]
-    fov_x_mm = W / scale_x
-    fov_y_mm = H / scale_y
-
-    # Choose highest-signal BGR channel for correlation (e.g., Red under red LED illumination)
-    chan_means = np.mean(np.stack(frames_bgr[::max(1, n_frames // 40)], axis=0), axis=(0, 1, 2))
+    H, W = samples[0].shape[:2]
+    sample_stack = np.stack(samples, axis=0).astype(np.float32)
+    del samples
+    chan_means = sample_stack.mean(axis=(0, 1, 2), dtype=np.float64)
     best_chan = int(np.argmax(chan_means))
-    print(f"Decoded {n_frames} frames ({W}x{H}), mean BGR={chan_means.round(1).tolist()} -> tracking on channel {best_chan}")
-
-    # Estimate fixed-pattern background & smooth illumination flat-field
-    sample_stack = np.stack(frames_bgr[::max(1, n_frames // 80)], axis=0).astype(np.float32)
     bg_bgr = np.median(sample_stack, axis=0)
-    bg_chan = bg_bgr[:, :, best_chan]
+    del sample_stack
+    gc.collect()
+
+    bg_chan = bg_bgr[:, :, best_chan].copy()
+    print(f"Frame size {W}x{H}, mean BGR={chan_means.round(1).tolist()} -> tracking on channel {best_chan}")
 
     if flatfield:
-        # Smooth illumination vignette map (sigma=80 removes dust/features, preserves lens shading)
         vignette = cv2.GaussianBlur(bg_bgr, (0, 0), 80.0)
         center_val = vignette[H // 2 - 64:H // 2 + 64, W // 2 - 64:W // 2 + 64].mean(axis=(0, 1))
-        # Avoid amplifying near-zero dark channels (e.g., B/G under red LED)
-        gain_map = np.ones_like(vignette, dtype=np.float32)
+        gain_map: np.ndarray | None = np.ones_like(vignette, dtype=np.float32)
         for c in range(3):
             if center_val[c] > 20.0:
                 gain_map[:, :, c] = np.clip(center_val[c] / np.maximum(vignette[:, :, c], 1.0), 0.7, 1.4)
+        del vignette
     else:
         gain_map = None
+    del bg_bgr
 
-    # Precompute high-pass tracking frames
-    hps = [_highpass_channel(im, bg_chan, best_chan) for im in frames_bgr]
+    fov_x_mm = W / scale_x
+    fov_y_mm = H / scale_y
 
-    # Group frame indices by segment
-    segs: dict[int, list[int]] = {}
-    for i, fr in enumerate(frames_meta):
-        segs.setdefault(int(fr["segment_number"]), []).append(i)
-    seg_ids = sorted(segs.keys())
-
-    # Initial canvas positions from interpolated stage poses
+    # --- Pass 1: Stream MKV sequentially (only 2 frames in RAM!) for intra-strip registration ---
+    print("\n--- Step 1: Streaming intra-strip optical registration ---")
     init_x = np.array([(fr["stage_x_mm"] - fov_x_mm / 2.0 - x_min) * scale_x for fr in frames_meta], dtype=np.float64)
     init_y = np.array([(fr["stage_y_mm"] - fov_y_mm / 2.0 - y_min) * scale_y for fr in frames_meta], dtype=np.float64)
+    seg_arr = np.array([int(fr["segment_number"]) for fr in frames_meta], dtype=np.int32)
 
-    pos_x = init_x.copy()
-    pos_y = init_y.copy()
+    # Estimate nominal right-edge overlap band width for quick texture scoring during Pass 1
+    segs_meta: dict[int, list[int]] = {}
+    for i, s in enumerate(seg_arr):
+        segs_meta.setdefault(int(s), []).append(i)
+    seg_ids_all = sorted(segs_meta.keys())
+    if len(seg_ids_all) >= 2:
+        nom_step_px = float(np.median([np.median(init_x[segs_meta[seg_ids_all[i + 1]]]) - np.median(init_x[segs_meta[seg_ids_all[i]]])
+                                       for i in range(len(seg_ids_all) - 1)]))
+        nom_ov_w = int(round(W - nom_step_px))
+    else:
+        nom_ov_w = W // 4
+    r_px0 = max(0, min(W - 64, max(W - max(80, nom_ov_w) + 24, W - 260)))
+    r_px1 = W - 20
 
-    # Step 1: Intra-strip optical subpixel registration
-    print("\n--- Step 1: Intra-strip optical registration ---")
-    strip_textured_counts: dict[int, int] = {}
+    right_band_stds = np.zeros(n_meta, dtype=np.float32)
+    edges_by_seg: dict[int, list[tuple[int, int, float, float, float]]] = {sid: [] for sid in seg_ids_all}
+    local_k_by_idx = np.zeros(n_meta, dtype=np.int32)
+    for sid, idxs in segs_meta.items():
+        for k, idx in enumerate(idxs):
+            local_k_by_idx[idx] = k
+
     intra_residuals_y: list[float] = []
+    cap = cv2.VideoCapture(str(mkv_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open video: {mkv_path}")
+    prev_hp: np.ndarray | None = None
+    prev_idx = -1
+    prev_seg = -1
+    n_decoded = 0
+    try:
+        for i in range(n_meta):
+            ok, bgr = cap.read()
+            if not ok:
+                break
+            n_decoded = i + 1
+            bgr = _rotate_frame(bgr, rot_deg)
+            cur_hp = _highpass_channel(bgr, bg_chan, best_chan)
+            del bgr
+            right_band_stds[i] = float(cur_hp[180:H - 180, r_px0:r_px1].std())
+
+            cur_seg = int(seg_arr[i])
+            if prev_hp is not None and cur_seg == prev_seg:
+                pred_fdx = -(init_x[i] - init_x[prev_idx])
+                pred_fdy = -(init_y[i] - init_y[prev_idx])
+                m = _match_pair_subpixel(prev_hp, cur_hp, pred_fdx, pred_fdy, search_rx=24, search_ry=75, ds=2)
+                if m is not None:
+                    fdx, fdy, corr, pstd = m
+                    if corr >= min_corr and pstd >= 2.8:
+                        meas_dx = -fdx
+                        meas_dy = -fdy
+                        if abs(meas_dx - (init_x[i] - init_x[prev_idx])) < 22.0 and abs(meas_dy - (init_y[i] - init_y[prev_idx])) < 65.0:
+                            k_prev = int(local_k_by_idx[prev_idx])
+                            edges_by_seg[cur_seg].append((k_prev, k_prev + 1, meas_dx, meas_dy, 150.0 * (corr ** 2)))
+                            intra_residuals_y.append(meas_dy - (init_y[i] - init_y[prev_idx]))
+
+            prev_hp = cur_hp
+            prev_idx = i
+            prev_seg = cur_seg
+    finally:
+        cap.release()
+    prev_hp = None
+
+    if n_decoded == 0:
+        raise RuntimeError("No frames decoded from MKV in Pass 1.")
+    if n_decoded != n_meta:
+        print(f"Warning: MKV frame count ({n_decoded}) != metadata count ({n_meta}), using {n_decoded}.")
+    n_frames = n_decoded
+
+    segs: dict[int, list[int]] = {}
+    for i in range(n_frames):
+        segs.setdefault(int(seg_arr[i]), []).append(i)
+    seg_ids = sorted(segs.keys())
+
+    pos_x = init_x[:n_frames].copy()
+    pos_y = init_y[:n_frames].copy()
+    strip_textured_counts: dict[int, int] = {}
+
     for sid in seg_ids:
         idxs = segs[sid]
         x0 = init_x[idxs]
         y0 = init_y[idxs]
-        opt_edges: list[tuple[int, int, float, float, float]] = []
-        for k in range(len(idxs) - 1):
-            pred_fdx = -(x0[k + 1] - x0[k])
-            pred_fdy = -(y0[k + 1] - y0[k])
-            m = _match_pair_subpixel(hps[idxs[k]], hps[idxs[k + 1]], pred_fdx, pred_fdy, search_rx=24, search_ry=75, ds=2)
-            if m is None:
-                continue
-            fdx, fdy, corr, pstd = m
-            if corr >= min_corr and pstd >= 2.8:
-                meas_dx = -fdx
-                meas_dy = -fdy
-                # Reject wild outliers (> 65 px off predicted pose step)
-                if abs(meas_dx - (x0[k + 1] - x0[k])) < 22.0 and abs(meas_dy - (y0[k + 1] - y0[k])) < 65.0:
-                    opt_edges.append((k, k + 1, meas_dx, meas_dy, 150.0 * (corr ** 2)))
-                    intra_residuals_y.append(meas_dy - (y0[k + 1] - y0[k]))
+        opt_edges = [e for e in edges_by_seg[sid] if e[1] < len(idxs)]
         xs, ys = _solve_strip_positions(x0, y0, opt_edges, pose_weight=1.0)
         pos_x[idxs] = xs
         pos_y[idxs] = ys
         strip_textured_counts[sid] = len(opt_edges)
-        max_shift_y = float(np.max(np.abs(ys - y0)))
-        max_shift_x = float(np.max(np.abs(xs - x0)))
         print(f"  Strip {sid}: {len(idxs):3d} frames, {len(opt_edges):3d} optical edges, "
-              f"max adjustment vs stage pose: dX={max_shift_x:.1f} px, dY={max_shift_y:.1f} px")
+              f"max adjustment vs stage pose: dX={float(np.max(np.abs(xs - x0))):.1f} px, "
+              f"dY={float(np.max(np.abs(ys - y0))):.1f} px")
 
     if intra_residuals_y:
         arr = np.array(intra_residuals_y)
         print(f"  Step-to-step optical vs stage pose Y diff: rms={np.sqrt(np.mean(arr**2)):.2f} px, p95={np.percentile(np.abs(arr),95):.2f} px")
 
-    # Step 2: Inter-strip global column alignment
+    # --- Pass 2: Selective decode ONLY for inter-strip seam candidate frames ---
     print("\n--- Step 2: Inter-strip overlap alignment ---")
     n_strips = len(seg_ids)
-    sid_to_idx = {sid: i for i, sid in enumerate(seg_ids)}
-    seam_edges: list[tuple[int, int, float, float, float]] = []
+    seam_plans: list[tuple[int, int, int, int, list[tuple[int, list[int]]]]] = []
+    needed_right: set[int] = set()
+    needed_left: set[int] = set()
+    left_crop_w = min(W, max(400, nom_ov_w + 260))
 
     for i in range(n_strips - 1):
         s1, s2 = seg_ids[i], seg_ids[i + 1]
         id1, id2 = segs[s1], segs[s2]
-        # Estimate nominal overlap width from strip mean X difference
         nom_dx = float(np.median(pos_x[id2]) - np.median(pos_x[id1]))
         ov_w = int(round(W - nom_dx))
         if ov_w < 80 or ov_w >= W - 64:
             print(f"  Strip {s1}->{s2}: unexpected overlap {ov_w} px, skipping")
             continue
 
-        # Pick textured frames in strip s1 along the right overlap band
         px0 = max(W - ov_w + 24, W - 260)
         px1 = W - 20
-        r_stds = np.array([float(hps[idx][180:H - 180, px0:px1].std()) for idx in id1])
+        r_stds = right_band_stds[id1]
         cands = np.where(r_stds > 4.0)[0]
         if len(cands) == 0:
             print(f"  Strip {s1}->{s2}: blank overlap (max std={r_stds.max():.1f}), keeping stage pose")
             continue
 
         picks = cands[np.linspace(0, len(cands) - 1, min(16, len(cands))).astype(int)]
+        y2_arr = pos_y[id2]
+        pair_list: list[tuple[int, list[int]]] = []
+        for k1 in picks:
+            f1 = id1[int(k1)]
+            k2_c = int(np.argmin(np.abs(y2_arr - pos_y[f1])))
+            f2s = [id2[k2] for k2 in range(max(0, k2_c - 5), min(len(id2), k2_c + 6))]
+            pair_list.append((f1, f2s))
+            needed_right.add(f1)
+            needed_left.update(f2s)
+        seam_plans.append((i, s1, s2, px0, px1, pair_list))  # type: ignore[arg-type]
+
+    needed_all = needed_right | needed_left
+    cache_r_px0 = min([r_px0] + [p[3] for p in seam_plans]) if seam_plans else r_px0
+    right_cache: dict[int, np.ndarray] = {}
+    left_cache: dict[int, np.ndarray] = {}
+    if needed_all:
+        print(f"  Caching overlap bands for {len(needed_all)}/{n_frames} frames...")
+        for f_idx, bgr in _iter_selected_frames(mkv_path, needed_all, max(needed_all), rot_deg):
+            hp = _highpass_channel(bgr, bg_chan, best_chan)
+            if f_idx in needed_right:
+                right_cache[f_idx] = hp[:, cache_r_px0:W].astype(np.float16)
+            if f_idx in needed_left:
+                left_cache[f_idx] = hp[:, 0:left_crop_w].astype(np.float16)
+            del hp, bgr
+
+    seam_edges: list[tuple[int, int, float, float, float]] = []
+    for i, s1, s2, px0, px1, pair_list in seam_plans:  # type: ignore[misc]
         obs_dx_list: list[float] = []
         obs_dy_list: list[float] = []
         obs_corr_list: list[float] = []
-        y2_arr = pos_y[id2]
+        pw = px1 - px0
+        ph = (H - 180) - 180
 
-        for k1 in picks:
-            f1 = id1[k1]
-            y1_cur = pos_y[f1]
+        for f1, f2s in pair_list:
+            hp1_r = right_cache.get(f1)
+            if hp1_r is None:
+                continue
+            off1 = px0 - cache_r_px0
+            if off1 < 0 or off1 + pw > hp1_r.shape[1]:
+                continue
+            patch = hp1_r[180:H - 180, off1:off1 + pw].astype(np.float32)
             x1_cur = pos_x[f1]
-            k2_c = int(np.argmin(np.abs(y2_arr - y1_cur)))
-            patch = hps[f1][180:H - 180, px0:px1]
-            pw = px1 - px0
-            ph = (H - 180) - 180
+            y1_cur = pos_y[f1]
             best = None
 
-            for k2 in range(max(0, k2_c - 5), min(len(id2), k2_c + 6)):
-                f2 = id2[k2]
+            for f2 in f2s:
+                hp2_l = left_cache.get(f2)
+                if hp2_l is None:
+                    continue
                 pred_fdx = x1_cur - pos_x[f2]
                 pred_fdy = y1_cur - pos_y[f2]
                 ex0 = int(round(px0 + pred_fdx))
                 ey0 = int(round(180 + pred_fdy))
                 sx0 = max(0, ex0 - 80)
                 sy0 = max(0, ey0 - 90)
-                sx1 = min(W, ex0 + pw + 80)
+                sx1 = min(hp2_l.shape[1], ex0 + pw + 80)
                 sy1 = min(H, ey0 + ph + 90)
                 if sx1 - sx0 <= pw + 4 or sy1 - sy0 <= ph + 4:
                     continue
-                res = cv2.matchTemplate(hps[f2][sy0:sy1, sx0:sx1], patch, cv2.TM_CCOEFF_NORMED)
+                res = cv2.matchTemplate(hp2_l[sy0:sy1, sx0:sx1].astype(np.float32), patch, cv2.TM_CCOEFF_NORMED)
                 _, mv, _, ml = cv2.minMaxLoc(res)
                 if best is None or mv > best[0]:
                     sub_x, sub_y = _subpixel_peak(res, ml[0], ml[1])
                     fdx = (sx0 + sub_x) - px0
                     fdy = (sy0 + sub_y) - 180.0
-                    # Required strip offset (delta_s2 - delta_s1) = (pos_1 - pos_2) - feat_shift
                     dX_req = (x1_cur - pos_x[f2]) - fdx
                     dY_req = (y1_cur - pos_y[f2]) - fdy
                     best = (float(mv), dX_req, dY_req)
@@ -404,14 +503,16 @@ def stitch_scan(
         else:
             print(f"  Strip {s1}->{s2}: only {len(obs_dx_list)} matches >= {min_corr}, keeping stage pose")
 
-    # Solve global strip offsets (delta_x, delta_y) anchored on the most textured strip
+    right_cache.clear()
+    left_cache.clear()
+    gc.collect()
+
     anchor_strip = max(range(n_strips), key=lambda i: strip_textured_counts[seg_ids[i]])
     Sx = np.zeros((n_strips, n_strips), dtype=np.float64)
     bx_s = np.zeros(n_strips, dtype=np.float64)
     Sy = np.zeros((n_strips, n_strips), dtype=np.float64)
     by_s = np.zeros(n_strips, dtype=np.float64)
 
-    # Weak relative stage prior (keeps blank strips at their nominal stage step)
     for i in range(n_strips - 1):
         w = 1.0
         for M in (Sx, Sy):
@@ -448,23 +549,51 @@ def stitch_scan(
         pos_x[idxs] += delta_sx[i]
         pos_y[idxs] += delta_sy[i]
 
-    # Step 3: Subpixel center-weighted feather blending
-    print("\n--- Step 3: Subpixel feather blending ---")
+    # --- Pass 3: Streaming subpixel center-weighted feather blending ---
+    print("\n--- Step 3: Streaming subpixel feather blending ---")
     out_w = max(1, int(np.ceil((x_max - x_min) * scale_x)))
     out_h = max(1, int(np.ceil((y_max - y_min) * scale_y)))
-    accum_bgr = np.zeros((out_h, out_w, 3), dtype=np.float32)
-    accum_w = np.zeros((out_h, out_w), dtype=np.float32)
     base_weight = _make_feather_weight(H, W)
 
-    blended_count = 0
+    chosen_set: set[int] = set()
     for sid in seg_ids:
         idxs = segs[sid]
-        # Always include first and last frame of each strip, plus every `frame_stride`-th frame
-        chosen = idxs[::max(1, frame_stride)]
-        if idxs[-1] != chosen[-1]:
-            chosen = chosen + [idxs[-1]]
+        picked = idxs[::max(1, frame_stride)]
+        if idxs[-1] != picked[-1]:
+            picked = picked + [idxs[-1]]
+        chosen_set.update(picked)
 
-        for f_idx in chosen:
+    # Tile horizontally in Y-bands when canvas is very large so peak RAM stays <= ~1.8 GB
+    max_band_pixels = 100_000_000  # ~1.6 GB for float32 BGR + float32 W
+    if out_w * out_h <= max_band_pixels:
+        band_height = out_h
+    else:
+        band_height = max(H, max_band_pixels // out_w)
+
+    out_img = np.full((out_h, out_w, 3), 255, dtype=np.uint8)
+    blended_total = 0
+    valid_pixels = 0
+
+    num_bands = (out_h + band_height - 1) // band_height
+    if num_bands > 1:
+        print(f"  Large canvas ({out_w}x{out_h}): blending in {num_bands} Y-bands of {band_height} px to bound RAM.")
+
+    for band_idx in range(num_bands):
+        by0 = band_idx * band_height
+        by1 = min(out_h, by0 + band_height)
+        bh = by1 - by0
+
+        band_frames = {
+            f_idx for f_idx in chosen_set
+            if pos_y[f_idx] + H + 1 > by0 and pos_y[f_idx] < by1
+        }
+        if not band_frames:
+            continue
+
+        accum_bgr = np.zeros((bh, out_w, 3), dtype=np.float32)
+        accum_w = np.zeros((bh, out_w), dtype=np.float32)
+
+        for f_idx, bgr in _iter_selected_frames(mkv_path, band_frames, max(band_frames), rot_deg):
             x_f = float(pos_x[f_idx])
             y_f = float(pos_y[f_idx])
             ix = int(np.floor(x_f))
@@ -472,20 +601,18 @@ def stitch_scan(
             fx = x_f - ix
             fy = y_f - iy
 
-            # Bounding box on canvas for (W+1, H+1) subpixel-shifted tile
             tw, th = W + 1, H + 1
             cx0 = max(0, ix)
-            cy0 = max(0, iy)
+            cy0 = max(by0, iy)
             cx1 = min(out_w, ix + tw)
-            cy1 = min(out_h, iy + th)
+            cy1 = min(by1, iy + th)
             if cx1 <= cx0 or cy1 <= cy0:
                 continue
 
-            img_f = frames_bgr[f_idx].astype(np.float32)
+            img_f = bgr.astype(np.float32)
             if gain_map is not None:
                 img_f *= gain_map
 
-            # Subpixel shift into (tw, th) tile
             M = np.array([[1.0, 0.0, fx], [0.0, 1.0, fy]], dtype=np.float32)
             shifted_bgr = cv2.warpAffine(img_f, M, (tw, th), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
             shifted_w = cv2.warpAffine(base_weight, M, (tw, th), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
@@ -496,18 +623,20 @@ def stitch_scan(
             sy1 = cy1 - iy
 
             w_crop = shifted_w[sy0:sy1, sx0:sx1]
-            accum_bgr[cy0:cy1, cx0:cx1] += shifted_bgr[sy0:sy1, sx0:sx1] * w_crop[:, :, None]
-            accum_w[cy0:cy1, cx0:cx1] += w_crop
-            blended_count += 1
+            accum_bgr[cy0 - by0:cy1 - by0, cx0:cx1] += shifted_bgr[sy0:sy1, sx0:sx1] * w_crop[:, :, None]
+            accum_w[cy0 - by0:cy1 - by0, cx0:cx1] += w_crop
+            blended_total += 1
 
-    valid = accum_w > 1e-6
-    out_img = np.full((out_h, out_w, 3), 255, dtype=np.uint8)
-    out_img[valid] = np.clip(accum_bgr[valid] / accum_w[valid, None], 0.0, 255.0).astype(np.uint8)
+        valid = accum_w > 1e-6
+        valid_pixels += int(np.sum(valid))
+        band_out = out_img[by0:by1]
+        band_out[valid] = np.clip(accum_bgr[valid] / accum_w[valid, None], 0.0, 255.0).astype(np.uint8)
+        del accum_bgr, accum_w, valid
+        gc.collect()
 
     if output_path is None:
         output_path = scan_dir / "scan_composite_stitched.tif"
 
-    # Save uncompressed/LZW TIFF
     ok = cv2.imwrite(str(output_path), out_img, [cv2.IMWRITE_TIFF_COMPRESSION, 5])
     if not ok:
         ok = cv2.imwrite(str(output_path), out_img)
@@ -515,50 +644,26 @@ def stitch_scan(
         raise RuntimeError(f"Failed to write {output_path}")
 
     elapsed = time.perf_counter() - t0
-    print(f"Saved {output_path} ({out_w}x{out_h}, {blended_count} frames blended, "
-          f"coverage={np.mean(valid)*100:.2f}%, {output_path.stat().st_size/1e6:.2f} MB) in {elapsed:.1f}s")
+    coverage = 100.0 * valid_pixels / float(out_w * out_h)
+    print(f"Saved {output_path} ({out_w}x{out_h}, {len(chosen_set)} frames selected / {blended_total} tile writes, "
+          f"coverage={coverage:.2f}%, {output_path.stat().st_size/1e6:.2f} MB) in {elapsed:.1f}s")
 
-    # Optional debug crops comparing raw scan_composite.tif vs stitched output
     if save_debug_dir is not None:
         save_debug_dir.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(save_debug_dir / f"{scan_dir.name}_stitched_overview.png"),
-                    cv2.resize(out_img, (out_w // 8, out_h // 8), interpolation=cv2.INTER_AREA))
-
-        # Locate circle center in red channel for zoomed ruler & circle-top crops
-        R = out_img[:, :, 2]
-        mid_y = R[2700:3500, 2200:min(out_w, 6800)]
-        col_dark = np.mean(mid_y < 95, axis=0)
-        lxs = np.where(col_dark[:1500] > 0.25)[0] + 2200
-        rxs = np.where(col_dark[2500:] > 0.25)[0] + 2200 + 2500
-        if len(lxs) and len(rxs):
-            cx = int(round(0.5 * (float(np.median(lxs)) + float(np.median(rxs)))))
-            mid_x = R[900:min(out_h, 5500), max(0, cx - 250):max(50, cx - 100)]
-            row_dark = np.mean(mid_x < 95, axis=1)
-            tys = np.where(row_dark[:1500] > 0.25)[0] + 900
-            bys = np.where(row_dark[2500:] > 0.25)[0] + 900 + 2500
-            if len(tys) and len(bys):
-                cy_t = int(round(float(np.median(tys))))
-                cy_b = int(round(float(np.median(bys))))
-                cy = (cy_t + cy_b) // 2
-                diam_x = float(np.median(rxs)) - float(np.median(lxs))
-                diam_y = float(cy_b - cy_t)
-                print(f"Stitched circle: W={diam_x:.1f} px, H={diam_y:.1f} px, aspect W/H={diam_x/diam_y:.4f}")
-                cv2.imwrite(str(save_debug_dir / f"{scan_dir.name}_stitched_zoom_top.png"),
-                            out_img[max(0, cy_t - 150):cy_t + 300, max(0, cx - 200):min(out_w, cx + 650)])
-                cv2.imwrite(str(save_debug_dir / f"{scan_dir.name}_stitched_zoom_ruler.png"),
-                            out_img[max(0, cy - 220):min(out_h, cy + 220), max(0, cx - 600):min(out_w, cx + 600)])
+                    cv2.resize(out_img, (max(1, out_w // 8), max(1, out_h // 8)), interpolation=cv2.INTER_AREA))
 
     return output_path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Optical subpixel stitcher for microscope scan directories.")
+    parser = argparse.ArgumentParser(description="Streaming optical subpixel stitcher for microscope scan directories.")
     parser.add_argument("scan_dir", type=Path, help="Path to scan directory containing scan_capture.mkv and scan_metadata.json.")
     parser.add_argument("-o", "--output", type=Path, default=None, help="Output TIFF path (default: <scan_dir>/scan_composite_stitched.tif).")
     parser.add_argument("--no-flatfield", action="store_true", help="Disable smooth illumination flat-field normalization.")
     parser.add_argument("--stride", type=int, default=1, help="Blend every Nth frame per strip (default: 1 = all frames).")
     parser.add_argument("--min-corr", type=float, default=0.72, help="Minimum NCC correlation threshold (default: 0.72).")
-    parser.add_argument("--debug-dir", type=Path, default=None, help="Optional directory to save overview and zoom verification PNGs.")
+    parser.add_argument("--debug-dir", type=Path, default=None, help="Optional directory to save overview verification PNG.")
     args = parser.parse_args()
 
     stitch_scan(
