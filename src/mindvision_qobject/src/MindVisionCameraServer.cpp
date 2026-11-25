@@ -682,6 +682,11 @@ public:
                 m_synStageState = QStringLiteral("Idle");
                 emitAndBroadcastStageLog(formatSyntheticStageStatus());
             }
+            if (rawCmd.contains(static_cast<char>(0x85))) {
+                m_synStageState = QStringLiteral("Idle");
+                emitAndBroadcastStageLog(QStringLiteral("Rx: [MSG:Synthetic jog cancelled]"));
+                emitAndBroadcastStageLog(formatSyntheticStageStatus());
+            }
             return true;
         }
 

@@ -11,9 +11,12 @@
 #undef COPILOT_RESTORE_QT_SLOTS_MACRO
 #endif
 
+#include <QAbstractSpinBox>
+#include <QApplication>
 #include <QCloseEvent>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QTextEdit>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -784,6 +787,15 @@ MainWindow::MainWindow(QWidget *parent)
     // Param poll timer
     connect(&m_paramPollTimer, &QTimer::timeout, this, &MainWindow::pollCameraParams);
 
+    // Dead-man watchdog: if the window loses focus without delivering a key release,
+    // immediately cancel continuous keyboard jogging.
+    connect(&m_jogWatchdogTimer, &QTimer::timeout, this, [this]() {
+        if (!isActiveWindow() || m_isScanning ||
+            (m_cncControlPanel && m_cncControlPanel->isAutofocusActive())) {
+            clearKeyboardJog();
+        }
+    });
+
     // CNC panel
     if (m_cncControlPanel) {
         connect(m_cncControlPanel, &CNCControlPanel::positionUpdated, this, &MainWindow::onCncPositionUpdated);
@@ -918,6 +930,7 @@ void MainWindow::connectSignals()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    clearKeyboardJog();
     saveSettings();
     onStopClicked();
     if (!m_pythonHostedExternally) {
@@ -1474,6 +1487,11 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         } else if (event->type() == QEvent::KeyPress) {
             keyPressEvent(static_cast<QKeyEvent *>(event));
             return true;
+        } else if (event->type() == QEvent::KeyRelease) {
+            keyReleaseEvent(static_cast<QKeyEvent *>(event));
+            return true;
+        } else if (event->type() == QEvent::FocusOut) {
+            clearKeyboardJog();
         } else if (event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress) {
             auto *me = static_cast<QMouseEvent *>(event);
             const QPointF pos = getImageCoords(me->position());
@@ -1545,6 +1563,11 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         if (event->type() == QEvent::KeyPress) {
             keyPressEvent(static_cast<QKeyEvent *>(event));
             return true;
+        } else if (event->type() == QEvent::KeyRelease) {
+            keyReleaseEvent(static_cast<QKeyEvent *>(event));
+            return true;
+        } else if (event->type() == QEvent::FocusOut) {
+            clearKeyboardJog();
         }
     } else if (watched == m_mosaicTabContainer && event->type() == QEvent::Resize) {
         repositionPipOverlays();
@@ -1554,15 +1577,183 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     return QMainWindow::eventFilter(watched, event);
 }
 
+void MainWindow::changeEvent(QEvent *event)
+{
+    if (event && (event->type() == QEvent::ActivationChange ||
+                  event->type() == QEvent::WindowDeactivate ||
+                  event->type() == QEvent::WindowStateChange)) {
+        if (!isActiveWindow()) {
+            clearKeyboardJog();
+        }
+    }
+    QMainWindow::changeEvent(event);
+}
+
+bool MainWindow::isTextInputFocused() const
+{
+    QWidget *fw = QApplication::focusWidget();
+    if (!fw) {
+        return false;
+    }
+    return qobject_cast<QLineEdit *>(fw) != nullptr
+        || qobject_cast<QPlainTextEdit *>(fw) != nullptr
+        || qobject_cast<QTextEdit *>(fw) != nullptr
+        || qobject_cast<QAbstractSpinBox *>(fw) != nullptr
+        || qobject_cast<QsciScintilla *>(fw) != nullptr
+        || qobject_cast<QComboBox *>(fw) != nullptr;
+}
+
+static bool isJogKey(int key)
+{
+    switch (key) {
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+    case Qt::Key_Up:
+    case Qt::Key_Down:
+    case Qt::Key_PageUp:
+    case Qt::Key_PageDown:
+    case Qt::Key_A:
+    case Qt::Key_D:
+    case Qt::Key_W:
+    case Qt::Key_S:
+    case Qt::Key_E:
+    case Qt::Key_Q:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool MainWindow::handleJogKeyEvent(QKeyEvent *event, bool pressed)
+{
+    if (!m_cncControlPanel || !event) {
+        return false;
+    }
+
+    const int key = event->key();
+    if (!isJogKey(key)) {
+        return false;
+    }
+
+    // Never hijack typing in inputs/editors/console, or Ctrl/Alt shortcuts.
+    if (pressed) {
+        if (isTextInputFocused()) {
+            return false;
+        }
+        if (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) {
+            return false;
+        }
+        if (m_isScanning || m_cncControlPanel->isAutofocusActive()) {
+            return false;
+        }
+    } else {
+        // Always allow releasing a key that was previously captured for jogging.
+        if (!m_heldJogKeys.contains(key) && isTextInputFocused()) {
+            return false;
+        }
+    }
+
+    // Discrete single-step mode when Hold-to-Jog is unchecked.
+    if (!m_cncControlPanel->isContinuousJogEnabled()) {
+        if (!pressed) {
+            return false;
+        }
+        switch (key) {
+        case Qt::Key_Left:
+        case Qt::Key_A:        m_cncControlPanel->moveLeft();    return true;
+        case Qt::Key_Right:
+        case Qt::Key_D:        m_cncControlPanel->moveRight();   return true;
+        case Qt::Key_Up:
+        case Qt::Key_W:        m_cncControlPanel->moveForward(); return true;
+        case Qt::Key_Down:
+        case Qt::Key_S:        m_cncControlPanel->moveBack();    return true;
+        case Qt::Key_PageUp:
+        case Qt::Key_E:        m_cncControlPanel->moveUp();      return true;
+        case Qt::Key_PageDown:
+        case Qt::Key_Q:        m_cncControlPanel->moveDown();    return true;
+        default:               return false;
+        }
+    }
+
+    // Continuous Hold-to-Jog mode: ignore OS key-repeat so only physical
+    // press/release edges drive smooth FluidNC $J= + 0x85 motion.
+    if (event->isAutoRepeat()) {
+        return true;
+    }
+
+    m_jogShiftHeld = (event->modifiers() & Qt::ShiftModifier) != 0;
+    if (pressed) {
+        m_heldJogKeys.insert(key);
+    } else {
+        m_heldJogKeys.remove(key);
+    }
+    updateKeyboardJog();
+    return true;
+}
+
+void MainWindow::updateKeyboardJog()
+{
+    if (!m_cncControlPanel) {
+        return;
+    }
+
+    int dx = 0;
+    int dy = 0;
+    int dz = 0;
+    if (m_heldJogKeys.contains(Qt::Key_Right) || m_heldJogKeys.contains(Qt::Key_D)) ++dx;
+    if (m_heldJogKeys.contains(Qt::Key_Left)  || m_heldJogKeys.contains(Qt::Key_A)) --dx;
+    if (m_heldJogKeys.contains(Qt::Key_Up)    || m_heldJogKeys.contains(Qt::Key_W)) ++dy;
+    if (m_heldJogKeys.contains(Qt::Key_Down)  || m_heldJogKeys.contains(Qt::Key_S)) --dy;
+    if (m_heldJogKeys.contains(Qt::Key_PageUp)   || m_heldJogKeys.contains(Qt::Key_E)) ++dz;
+    if (m_heldJogKeys.contains(Qt::Key_PageDown) || m_heldJogKeys.contains(Qt::Key_Q)) --dz;
+
+    if (dx == 0 && dy == 0 && dz == 0) {
+        m_jogWatchdogTimer.stop();
+        m_cncControlPanel->stopContinuousJog();
+        return;
+    }
+
+    if (!m_jogWatchdogTimer.isActive()) {
+        m_jogWatchdogTimer.start(200);
+    }
+    m_cncControlPanel->setContinuousJogVector(dx, dy, dz, m_jogShiftHeld);
+}
+
+void MainWindow::clearKeyboardJog()
+{
+    m_heldJogKeys.clear();
+    m_jogShiftHeld = false;
+    m_jogWatchdogTimer.stop();
+    if (m_cncControlPanel) {
+        m_cncControlPanel->stopContinuousJog();
+    }
+}
+
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_Escape) {
+        if (!m_heldJogKeys.isEmpty() ||
+            (m_cncControlPanel && m_cncControlPanel->isContinuousJogActive())) {
+            clearKeyboardJog();
+            event->accept();
+            return;
+        }
+    }
+
+    if (event->key() == Qt::Key_Shift && !event->isAutoRepeat() && !m_heldJogKeys.isEmpty()) {
+        m_jogShiftHeld = true;
+        updateKeyboardJog();
+    }
+
     if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab) {
+        clearKeyboardJog();
         toggleCenterViewTab();
         event->accept();
         return;
     }
 
-    if (event->key() == Qt::Key_R) {
+    if (event->key() == Qt::Key_R && !isTextInputFocused() &&
+        !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
         if (m_mosaicPanel) {
             m_mosaicPanel->clearMosaic();
             log("Mosaic cleared.");
@@ -1571,18 +1762,29 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
-    if (m_cncControlPanel) {
-        switch (event->key()) {
-        case Qt::Key_Left:  m_cncControlPanel->moveLeft();    return;
-        case Qt::Key_Right: m_cncControlPanel->moveRight();   return;
-        case Qt::Key_Up:    m_cncControlPanel->moveForward();  return;
-        case Qt::Key_Down:  m_cncControlPanel->moveBack();     return;
-        case Qt::Key_PageUp:   m_cncControlPanel->moveUp();    return;
-        case Qt::Key_PageDown: m_cncControlPanel->moveDown();  return;
-        default: break;
+    if (handleJogKeyEvent(event, true)) {
+        event->accept();
+        return;
+    }
+
+    QMainWindow::keyPressEvent(event);
+}
+
+void MainWindow::keyReleaseEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Shift && !event->isAutoRepeat()) {
+        m_jogShiftHeld = false;
+        if (!m_heldJogKeys.isEmpty()) {
+            updateKeyboardJog();
         }
     }
-    QMainWindow::keyPressEvent(event);
+
+    if (handleJogKeyEvent(event, false)) {
+        event->accept();
+        return;
+    }
+
+    QMainWindow::keyReleaseEvent(event);
 }
 
 void MainWindow::toggleCenterViewTab()
@@ -3162,6 +3364,7 @@ void MainWindow::onMosaicScanRequested(double xMin, double yMin, double xMax, do
 void MainWindow::startScan(const QVector<QRectF> &areas, bool homeX, bool homeY,
                             bool serpentine, int feedrate)
 {
+    clearKeyboardJog();
     if (!m_cncControlPanel || areas.isEmpty()) return;
 
     // An open serial port is not a live controller.  Refuse before any state is
@@ -3801,6 +4004,11 @@ void MainWindow::loadStageSettings()
         QJsonObject obj = doc.object();
         m_stageSettings["stage_width_mm"] = obj.value("stage_width_mm").toDouble();
         m_stageSettings["stage_height_mm"] = obj.value("stage_height_mm").toDouble();
+        if (m_cncControlPanel) {
+            m_cncControlPanel->setStageBoundsMm(
+                m_stageSettings["stage_width_mm"].toDouble(),
+                m_stageSettings["stage_height_mm"].toDouble());
+        }
         log("Stage settings loaded.");
     }
 }

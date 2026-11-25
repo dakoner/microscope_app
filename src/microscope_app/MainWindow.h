@@ -22,6 +22,7 @@
 #include <QPointF>
 #include <QImage>
 #include <QElapsedTimer>
+#include <QSet>
 #include <QString>
 #include <cstdint>
 #include <deque>
@@ -98,7 +99,9 @@ public:
 protected:
     void closeEvent(QCloseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void changeEvent(QEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
@@ -186,6 +189,10 @@ private slots:
     void onGotoWaypointRequested(const QString &id, const QString &name,
                                  double xMm, double yMm, double zMm, bool includeZ);
     void syncWaypointsToMosaic();
+    bool isTextInputFocused() const;
+    bool handleJogKeyEvent(QKeyEvent *event, bool pressed);
+    void updateKeyboardJog();
+    void clearKeyboardJog();
 
     void log(const QString &message) const;
 
@@ -385,6 +392,9 @@ private:
 
     // Timer
     QTimer m_paramPollTimer;
+    QTimer m_jogWatchdogTimer;
+    QSet<int> m_heldJogKeys;
+    bool m_jogShiftHeld = false;
 
     // Ui
     Ui::MainWindow *ui = nullptr;

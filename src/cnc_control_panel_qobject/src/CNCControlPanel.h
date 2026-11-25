@@ -2,6 +2,7 @@
 #define CNCCONTROLPANEL_H
 
 #include <QGroupBox>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -58,6 +59,13 @@ public:
     bool startAutofocus(double searchRangeMm = 0.0, double coarseStepMm = 0.0);
     void cancelAutofocus(const QString &reason = QString());
 
+    // Smooth continuous Hold-to-Jog using FluidNC $J= + real-time 0x85 Jog Cancel.
+    void setStageBoundsMm(double widthMm, double heightMm);
+    bool isContinuousJogEnabled() const;
+    bool isContinuousJogActive() const { return m_continuousJogActive; }
+    void setContinuousJogVector(int dx, int dy, int dz, bool fineModifier = false);
+    void stopContinuousJog();
+
 signals:
     void logSignal(const QString &msg);
     void stateUpdated(const QString &state);
@@ -98,6 +106,8 @@ private slots:
     void onZFeedrateChanged(int v);
     void onAutofocusClicked();
     void advanceAutofocus();
+    void dispatchContinuousJog();
+    void checkContinuousJogContinuation();
 
 private:
     enum class PendingScanEvent {
@@ -123,6 +133,8 @@ private:
     void finishFocusSample();
     void startFocusPass(int pass, double centreMm, double halfWidthMm, double stepMm);
     void finishAutofocus(bool success, const QString &message);
+    void sendJogCancel();
+    double computeJogSpeedMultiplier(bool fineModifier) const;
 
     SerialWorker *m_serialWorker = nullptr;
     QTimer m_serialPollTimer;
@@ -187,7 +199,22 @@ private:
     double m_lastFocusScore = 0.0;
     double m_focusBestZ = 0.0;
     double m_focusBestScore = 0.0;
+    double m_lastXPosition = std::numeric_limits<double>::quiet_NaN();
+    double m_lastYPosition = std::numeric_limits<double>::quiet_NaN();
     double m_lastZPosition = std::numeric_limits<double>::quiet_NaN();
+
+    // Continuous Hold-to-Jog
+    QCheckBox *m_holdToJogCheck = nullptr;
+    QComboBox *m_jogSpeedCombo = nullptr;
+    QTimer m_jogDispatchTimer;
+    QTimer m_jogContinueTimer;
+    double m_stageWidthMm = 0.0;
+    double m_stageHeightMm = 0.0;
+    int m_jogDx = 0;
+    int m_jogDy = 0;
+    int m_jogDz = 0;
+    bool m_jogFineModifier = false;
+    bool m_continuousJogActive = false;
 };
 
 #endif // CNCCONTROLPANEL_H

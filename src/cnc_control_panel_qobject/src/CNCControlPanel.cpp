@@ -73,6 +73,10 @@ CNCControlPanel::CNCControlPanel(QWidget *parent)
 
     connect(&m_focusTimer, &QTimer::timeout, this, &CNCControlPanel::advanceAutofocus);
 
+    m_jogDispatchTimer.setSingleShot(true);
+    connect(&m_jogDispatchTimer, &QTimer::timeout, this, &CNCControlPanel::dispatchContinuousJog);
+    connect(&m_jogContinueTimer, &QTimer::timeout, this, &CNCControlPanel::checkContinuousJogContinuation);
+
     refreshSerialPorts();
     onSerialStatusChanged(false);
 }
@@ -194,6 +198,24 @@ void CNCControlPanel::setupUi()
     feedLayout->addWidget(m_zFeedrateInput);
     mainLayout->addLayout(feedLayout);
 
+    // Keyboard Hold-to-Jog controls
+    auto *jogModeLayout = new QHBoxLayout;
+    m_holdToJogCheck = new QCheckBox(QStringLiteral("Hold-to-Jog"));
+    m_holdToJogCheck->setChecked(true);
+    m_holdToJogCheck->setToolTip(QStringLiteral(
+        "Hold Arrows/WASD (XY) or PageUp/PageDown/E/Q (Z) for smooth continuous jogging.\n"
+        "Hold Shift for fine speed; release key or press Esc to decelerate smoothly to a stop.\n"
+        "Uncheck to use discrete single-step taps per key press."));
+    m_jogSpeedCombo = new QComboBox;
+    m_jogSpeedCombo->addItem(QStringLiteral("Fine (0.2x)"), 0.2);
+    m_jogSpeedCombo->addItem(QStringLiteral("Normal (1x)"), 1.0);
+    m_jogSpeedCombo->addItem(QStringLiteral("Fast (2x)"), 2.0);
+    m_jogSpeedCombo->setCurrentIndex(1);
+    m_jogSpeedCombo->setToolTip(QStringLiteral("Speed preset for continuous keyboard Hold-to-Jog."));
+    jogModeLayout->addWidget(m_holdToJogCheck);
+    jogModeLayout->addWidget(m_jogSpeedCombo);
+    mainLayout->addLayout(jogModeLayout);
+
     // Action buttons
     auto *actLayout = new QHBoxLayout;
     m_homeButton = new QPushButton("Home");
@@ -238,6 +260,29 @@ void CNCControlPanel::setupUi()
     connect(m_sendCommandButton, &QPushButton::clicked, this, &CNCControlPanel::sendConsoleCommand);
     connect(m_commandInput, &QLineEdit::returnPressed, this, &CNCControlPanel::sendConsoleCommand);
     connect(m_autofocusButton, &QPushButton::clicked, this, &CNCControlPanel::onAutofocusClicked);
+    connect(m_holdToJogCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        if (!checked) {
+            stopContinuousJog();
+        }
+        if (m_jogSpeedCombo) {
+            m_jogSpeedCombo->setEnabled(checked);
+        }
+    });
+    connect(m_jogSpeedCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (m_continuousJogActive) {
+            const int dx = m_jogDx;
+            const int dy = m_jogDy;
+            const int dz = m_jogDz;
+            const bool fine = m_jogFineModifier;
+            sendJogCancel();
+            m_continuousJogActive = false;
+            m_jogDx = dx;
+            m_jogDy = dy;
+            m_jogDz = dz;
+            m_jogFineModifier = fine;
+            m_jogDispatchTimer.start(25);
+        }
+    });
 }
 
 void CNCControlPanel::setRemoteMode(bool remote)
@@ -478,6 +523,10 @@ void CNCControlPanel::parseStatus(const QString &statusStr)
             (parts[0] == QLatin1String("Alarm") || parts[0] == QLatin1String("Check"))) {
             cancelAutofocus(QString("Autofocus aborted: the controller reported %1.").arg(parts[0]));
         }
+        if (m_continuousJogActive &&
+            (parts[0] == QLatin1String("Alarm") || parts[0] == QLatin1String("Check"))) {
+            stopContinuousJog();
+        }
     }
 
     static QRegularExpression posRe("(?:WPos|MPos):(-?[\\d\\.]+),(-?[\\d\\.]+),(-?[\\d\\.]+)");
@@ -486,6 +535,8 @@ void CNCControlPanel::parseStatus(const QString &statusStr)
         double x = match.captured(1).toDouble();
         double y = match.captured(2).toDouble();
         double z = match.captured(3).toDouble();
+        m_lastXPosition = x;
+        m_lastYPosition = y;
         m_lastZPosition = z;
         m_wposXLabel->setText(QString::number(x, 'f', 3));
         m_wposYLabel->setText(QString::number(y, 'f', 3));
@@ -506,6 +557,7 @@ void CNCControlPanel::onSerialStatusChanged(bool connected)
         m_pendingScanEvents.clear();
         m_lastState.clear();
         m_statusPollTimer.stop();
+        stopContinuousJog();
         cancelAutofocus(QStringLiteral("Autofocus aborted: the stage link went down."));
     } else {
         m_statusPollTimer.start(m_statusPollIntervalMs);
@@ -678,6 +730,7 @@ void CNCControlPanel::setStatusPollIntervalMs(int intervalMs)
 
 void CNCControlPanel::stop()
 {
+    stopContinuousJog();
     cancelAutofocus(QStringLiteral("Autofocus aborted."));
     m_serialPollTimer.stop();
     m_statusPollTimer.stop();
@@ -692,6 +745,7 @@ void CNCControlPanel::setAutofocusAllowed(bool allowed)
     }
     m_autofocusAllowed = allowed;
     if (!allowed) {
+        stopContinuousJog();
         cancelAutofocus(QStringLiteral("Autofocus aborted: the stage is busy with a scan."));
     }
     updateAutofocusControlsEnabled();
@@ -747,6 +801,7 @@ bool CNCControlPanel::startAutofocus(double searchRangeMm, double coarseStepMm)
         emit logSignal(QStringLiteral("Autofocus is already running."));
         return false;
     }
+    stopContinuousJog();
     if (!isStageConnected()) {
         emit logSignal(QStringLiteral("Autofocus refused: the stage is not connected."));
         return false;
@@ -978,4 +1033,196 @@ void CNCControlPanel::cancelAutofocus(const QString &reason)
     m_focusBestZ = std::isfinite(m_lastZPosition) ? m_lastZPosition : m_focusBestZ;
     m_focusBestScore = m_lastFocusScore;
     finishAutofocus(false, reason.isEmpty() ? QStringLiteral("Autofocus cancelled.") : reason);
+}
+
+// ---------- Smooth continuous Hold-to-Jog ----------
+
+void CNCControlPanel::setStageBoundsMm(double widthMm, double heightMm)
+{
+    m_stageWidthMm = widthMm > 0.0 ? widthMm : 0.0;
+    m_stageHeightMm = heightMm > 0.0 ? heightMm : 0.0;
+}
+
+bool CNCControlPanel::isContinuousJogEnabled() const
+{
+    return !m_holdToJogCheck || m_holdToJogCheck->isChecked();
+}
+
+double CNCControlPanel::computeJogSpeedMultiplier(bool fineModifier) const
+{
+    double preset = 1.0;
+    if (m_jogSpeedCombo && m_jogSpeedCombo->currentData().isValid()) {
+        preset = m_jogSpeedCombo->currentData().toDouble();
+    }
+    if (fineModifier) {
+        // Holding Shift drops speed to 0.2x (or 0.1x if already in Fine preset).
+        return (preset <= 0.25) ? 0.1 : (preset * 0.2);
+    }
+    return preset;
+}
+
+void CNCControlPanel::sendJogCancel()
+{
+    // Strip any queued jog moves so they cannot fire after cancel.
+    for (int i = m_commandQueue.size() - 1; i >= 0; --i) {
+        if (m_commandQueue.at(i).startsWith(QLatin1String("$J="))) {
+            m_commandQueue.removeAt(i);
+        }
+    }
+    if (m_serialWorker && isStageConnected()) {
+        // Real-time GRBL / FluidNC Jog Cancel (0x85): smoothly decelerates to
+        // zero at configured acceleration and flushes the jog queue without alarm.
+        m_serialWorker->send_raw_command("\x85");
+    }
+}
+
+void CNCControlPanel::setContinuousJogVector(int dx, int dy, int dz, bool fineModifier)
+{
+    dx = (dx > 0) ? 1 : (dx < 0 ? -1 : 0);
+    dy = (dy > 0) ? 1 : (dy < 0 ? -1 : 0);
+    dz = (dz > 0) ? 1 : (dz < 0 ? -1 : 0);
+
+    if (!isContinuousJogEnabled() || (dx == 0 && dy == 0 && dz == 0)) {
+        stopContinuousJog();
+        return;
+    }
+
+    if (!isStageConnected() || !hasControllerStatus() ||
+        m_focusPhase != FocusPhase::Inactive || !m_autofocusAllowed) {
+        stopContinuousJog();
+        return;
+    }
+
+    if (dx == m_jogDx && dy == m_jogDy && dz == m_jogDz &&
+        fineModifier == m_jogFineModifier &&
+        (m_continuousJogActive || m_jogDispatchTimer.isActive())) {
+        return;
+    }
+
+    const bool hadActiveJog = m_continuousJogActive;
+    m_jogDx = dx;
+    m_jogDy = dy;
+    m_jogDz = dz;
+    m_jogFineModifier = fineModifier;
+
+    if (hadActiveJog) {
+        // Smoothly cancel the previous jog vector and wait briefly so FluidNC
+        // processes 0x85 before accepting the new $J= command.
+        sendJogCancel();
+        m_continuousJogActive = false;
+        m_jogContinueTimer.stop();
+        m_jogDispatchTimer.start(25);
+    } else {
+        m_jogDispatchTimer.stop();
+        dispatchContinuousJog();
+    }
+}
+
+void CNCControlPanel::dispatchContinuousJog()
+{
+    if ((m_jogDx == 0 && m_jogDy == 0 && m_jogDz == 0) ||
+        !isStageConnected() || !hasControllerStatus() ||
+        m_focusPhase != FocusPhase::Inactive || !m_autofocusAllowed) {
+        m_continuousJogActive = false;
+        m_jogContinueTimer.stop();
+        return;
+    }
+
+    constexpr double kMaxXyChunkMm = 25.0;
+    constexpr double kMaxZChunkMm = 2.0;
+    constexpr double kSoftLimitMarginMm = 0.5;
+    constexpr double kMinTravelMm = 0.005;
+
+    auto computeAxisTravel = [](int dir, double currentPos, double boundMax, double maxChunk) -> double {
+        if (dir == 0) {
+            return 0.0;
+        }
+        double avail = maxChunk;
+        if (boundMax > 2.0 * kSoftLimitMarginMm &&
+            std::isfinite(currentPos) &&
+            currentPos >= -1.0 && currentPos <= boundMax + 1.0) {
+            if (dir > 0) {
+                avail = std::max(0.0, (boundMax - kSoftLimitMarginMm) - currentPos);
+            } else {
+                avail = std::max(0.0, currentPos - kSoftLimitMarginMm);
+            }
+        }
+        return std::min(maxChunk, avail);
+    };
+
+    double travelX = computeAxisTravel(m_jogDx, m_lastXPosition, m_stageWidthMm, kMaxXyChunkMm);
+    double travelY = computeAxisTravel(m_jogDy, m_lastYPosition, m_stageHeightMm, kMaxXyChunkMm);
+    double travelZ = (m_jogDz != 0) ? kMaxZChunkMm : 0.0;
+
+    // Keep diagonal jogs at a true 45-degree angle unless one axis is already at its soft limit.
+    if (m_jogDx != 0 && m_jogDy != 0) {
+        if (travelX >= kMinTravelMm && travelY >= kMinTravelMm) {
+            const double d = std::min(travelX, travelY);
+            travelX = d;
+            travelY = d;
+        }
+    }
+
+    QStringList axisTokens;
+    if (m_jogDx != 0 && travelX >= kMinTravelMm) {
+        axisTokens.append(QString("X%1").arg(m_jogDx * travelX, 0, 'f', 3));
+    }
+    if (m_jogDy != 0 && travelY >= kMinTravelMm) {
+        axisTokens.append(QString("Y%1").arg(m_jogDy * travelY, 0, 'f', 3));
+    }
+    if (m_jogDz != 0 && travelZ >= kMinTravelMm) {
+        axisTokens.append(QString("Z%1").arg(m_jogDz * travelZ, 0, 'f', 3));
+    }
+
+    if (axisTokens.isEmpty()) {
+        // Already at the soft-limit boundary for all held axes.
+        m_continuousJogActive = false;
+        m_jogContinueTimer.stop();
+        return;
+    }
+
+    const double mult = computeJogSpeedMultiplier(m_jogFineModifier);
+    const int xyFeed = std::clamp(static_cast<int>(std::lround(m_xyFeedrate * mult)), 5, 1000);
+    const int zFeed = std::clamp(static_cast<int>(std::lround(m_zFeedrate * mult)), 2, 100);
+    const bool hasXy = (m_jogDx != 0 && travelX >= kMinTravelMm) || (m_jogDy != 0 && travelY >= kMinTravelMm);
+    const bool hasZ = (m_jogDz != 0 && travelZ >= kMinTravelMm);
+    int feed = xyFeed;
+    if (hasZ && hasXy) {
+        feed = std::min(xyFeed, zFeed);
+    } else if (hasZ) {
+        feed = zFeed;
+    }
+
+    const QString cmd = QString("$J=G91 %1 F%2").arg(axisTokens.join(QLatin1Char(' '))).arg(feed);
+    sendCommand(cmd);
+    m_continuousJogActive = true;
+    m_jogContinueTimer.start(150);
+}
+
+void CNCControlPanel::checkContinuousJogContinuation()
+{
+    if (!m_continuousJogActive || (m_jogDx == 0 && m_jogDy == 0 && m_jogDz == 0)) {
+        m_jogContinueTimer.stop();
+        return;
+    }
+    // If a long hold finishes a bounded 25 mm (XY) or 2 mm (Z) chunk and the
+    // controller reports Idle while keys remain held, seamlessly continue.
+    if (m_lastState == QLatin1String("Idle") && !m_waitingForOk && m_commandQueue.isEmpty()) {
+        dispatchContinuousJog();
+    }
+}
+
+void CNCControlPanel::stopContinuousJog()
+{
+    m_jogDispatchTimer.stop();
+    m_jogContinueTimer.stop();
+    const bool wasActive = m_continuousJogActive || m_jogDx != 0 || m_jogDy != 0 || m_jogDz != 0;
+    m_jogDx = 0;
+    m_jogDy = 0;
+    m_jogDz = 0;
+    m_jogFineModifier = false;
+    m_continuousJogActive = false;
+    if (wasActive) {
+        sendJogCancel();
+    }
 }
