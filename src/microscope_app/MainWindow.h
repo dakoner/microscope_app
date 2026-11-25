@@ -113,6 +113,7 @@ private slots:
     void onHomeAndRunClicked();
     void onCameraConnectionModeChanged(int index);
     void onReconnectCameraClicked();
+    void onMicroscopeModeChanged(bool inverted);
 
     // Camera settings
     void onAutoExposureToggled(bool checked);
@@ -387,6 +388,10 @@ private:
     // Color picker
     bool m_colorPickerActive = false;
 
+    // Optics orientation: Inverted flips incoming frames vertically so screen,
+    // mosaic, recordings, and click-to-center stay aligned with the stage axes.
+    bool m_microscopeInverted = false;
+
     // Click-to-center visual indicator
     QPointF m_clickCenterMarker;
     qint64 m_clickCenterMarkerExpireMs = 0;
@@ -426,6 +431,7 @@ private:
     // Camera controls
     QGroupBox *m_cameraConnectionGroup = nullptr;
     QComboBox *m_comboCameraMode = nullptr;
+    QComboBox *m_comboMicroscopeMode = nullptr;
     QLineEdit *m_editRemoteHost = nullptr;
     QSpinBox *m_spinRemotePort = nullptr;
     QSpinBox *m_spinRemoteJpegQuality = nullptr;
@@ -491,6 +497,7 @@ private:
     QAction *m_actionColorPicker = nullptr;
     QAction *m_actionHomeAndRun = nullptr;
     QAction *m_actionSaveWaypoint = nullptr;
+    QAction *m_actionInvertedMode = nullptr;
 };
 
 #endif // MAINWINDOW_H

@@ -3,6 +3,7 @@
 #include <QMouseEvent>
 #include <QKeyEvent>
 #include <QWheelEvent>
+#include <algorithm>
 #include <cmath>
 
 MosaicWidget::MosaicWidget(QWidget *parent)
@@ -90,11 +91,30 @@ void MosaicWidget::setSelections(const QVector<QRectF> &imageRects)
     }
 
     m_selectedRects = clipped;
+    m_activeRectIndex = m_selectedRects.isEmpty() ? -1 : (m_selectedRects.size() - 1);
     m_isSelecting = false;
+    m_isEditingRect = false;
+    m_editHandle = RectHandle::None;
     m_selStartPos = QPointF();
     m_selCurrentPos = QPointF();
     emit selectionsChanged(m_selectedRects);
     update();
+}
+
+bool MosaicWidget::removeActiveSelection()
+{
+    if (m_activeRectIndex < 0 || m_activeRectIndex >= m_selectedRects.size()) {
+        return false;
+    }
+    m_selectedRects.removeAt(m_activeRectIndex);
+    m_activeRectIndex = m_selectedRects.isEmpty()
+        ? -1
+        : std::min(m_activeRectIndex, static_cast<int>(m_selectedRects.size()) - 1);
+    m_isEditingRect = false;
+    m_editHandle = RectHandle::None;
+    emit selectionsChanged(m_selectedRects);
+    update();
+    return true;
 }
 
 void MosaicWidget::resetMosaic(int width, int height, int tileSize)
@@ -413,11 +433,14 @@ void MosaicWidget::paintEvent(QPaintEvent *)
             painter.drawImage(x, y, it.value());
         }
 
-        // Selected rects (pink)
-        for (const auto &r : m_selectedRects) {
-            QPen pen(QColor(255, 105, 180), 3.0 / m_zoomFactor);
+        // Selected rects (pink; active selection slightly brighter)
+        for (int i = 0; i < m_selectedRects.size(); ++i) {
+            const QRectF &r = m_selectedRects.at(i);
+            const bool isActive = (i == m_activeRectIndex);
+            QPen pen(isActive ? QColor(255, 130, 200) : QColor(255, 105, 180),
+                     (isActive ? 3.0 : 2.0) / m_zoomFactor);
             painter.setPen(pen);
-            painter.setBrush(QColor(255, 105, 180, 50));
+            painter.setBrush(isActive ? QColor(255, 105, 180, 65) : QColor(255, 105, 180, 40));
             painter.drawRect(r);
         }
 
@@ -478,6 +501,8 @@ void MosaicWidget::paintEvent(QPaintEvent *)
         }
 
         painter.restore();
+
+        drawSelectionHandles(painter);
 
         // Waypoint markers drawn in widget coordinates so pins and labels stay crisp at any zoom.
         if (!m_waypoints.isEmpty()) {
@@ -566,6 +591,153 @@ void MosaicWidget::drawAxes(QPainter &painter)
     }
 }
 
+void MosaicWidget::drawSelectionHandles(QPainter &painter)
+{
+    if (m_selectedRects.isEmpty() || m_totalWidth <= 0)
+        return;
+
+    painter.save();
+    QFont labelFont = painter.font();
+    labelFont.setPointSize(8);
+    labelFont.setBold(true);
+    painter.setFont(labelFont);
+    const QFontMetrics fm(labelFont);
+
+    const double pxPerMm = (m_stageWidthMm > 0 && m_calibrationPxPerMm > 0)
+        ? (double(m_totalWidth) / m_stageWidthMm)
+        : 0.0;
+
+    for (int i = 0; i < m_selectedRects.size(); ++i) {
+        const QRectF &imgRect = m_selectedRects.at(i);
+        const QPointF tl = imageToWidgetCoords(imgRect.topLeft());
+        const QPointF br = imageToWidgetCoords(imgRect.bottomRight());
+        const QRectF wr(tl, br);
+        const bool isActive = (i == m_activeRectIndex);
+
+        // Draw 8 resize handles (4 corners + 4 edge midpoints) on every region,
+        // highlighted on the active region so editing affordances are obvious.
+        const double half = isActive ? 4.5 : 3.5;
+        const QPointF midTop((wr.left() + wr.right()) / 2.0, wr.top());
+        const QPointF midBot((wr.left() + wr.right()) / 2.0, wr.bottom());
+        const QPointF midLeft(wr.left(), (wr.top() + wr.bottom()) / 2.0);
+        const QPointF midRight(wr.right(), (wr.top() + wr.bottom()) / 2.0);
+
+        const QPointF handles[8] = {
+            wr.topLeft(), wr.topRight(), wr.bottomLeft(), wr.bottomRight(),
+            midTop, midBot, midLeft, midRight
+        };
+
+        painter.setPen(QPen(QColor(30, 15, 25), 1.5));
+        painter.setBrush(isActive ? QColor(255, 255, 255) : QColor(255, 180, 220));
+        for (const QPointF &h : handles) {
+            painter.drawRect(QRectF(h.x() - half, h.y() - half, half * 2.0, half * 2.0));
+        }
+
+        // Dimension badge on the active rectangle (or when editing)
+        if (isActive && pxPerMm > 0.0) {
+            const double x1 = imgRect.left() / pxPerMm;
+            const double y1 = imgRect.top() / pxPerMm;
+            const double wMm = imgRect.width() / pxPerMm;
+            const double hMm = imgRect.height() / pxPerMm;
+            const QString badge = QString("%1 x %2 mm  (%3, %4)")
+                                      .arg(wMm, 0, 'f', 2)
+                                      .arg(hMm, 0, 'f', 2)
+                                      .arg(x1, 0, 'f', 1)
+                                      .arg(y1, 0, 'f', 1);
+            const int tw = fm.horizontalAdvance(badge) + 10;
+            const int th = fm.height() + 4;
+            QPointF badgePos(wr.left(), wr.top() - th - 6.0);
+            if (badgePos.y() < 4.0) {
+                badgePos.setY(wr.bottom() + 6.0);
+            }
+            const QRectF badgeRect(badgePos.x(), badgePos.y(), tw, th);
+            painter.setPen(QPen(QColor(255, 130, 200, 220), 1));
+            painter.setBrush(QColor(25, 15, 22, 210));
+            painter.drawRoundedRect(badgeRect, 3, 3);
+            painter.setPen(Qt::white);
+            painter.drawText(badgeRect, Qt::AlignCenter, badge);
+        }
+    }
+    painter.restore();
+}
+
+MosaicWidget::RectHit MosaicWidget::hitTestSelection(const QPointF &widgetPos) const
+{
+    if (m_selectedRects.isEmpty() || m_totalWidth <= 0) {
+        return {};
+    }
+
+    constexpr double kCornerRadius = 9.0;
+    constexpr double kEdgeTol = 7.0;
+
+    // Test active rect first, then remaining rects top-to-bottom.
+    QVector<int> order;
+    order.reserve(m_selectedRects.size());
+    if (m_activeRectIndex >= 0 && m_activeRectIndex < m_selectedRects.size()) {
+        order.append(m_activeRectIndex);
+    }
+    for (int i = m_selectedRects.size() - 1; i >= 0; --i) {
+        if (i != m_activeRectIndex) {
+            order.append(i);
+        }
+    }
+
+    auto nearPt = [](const QPointF &a, const QPointF &b, double r) {
+        return std::abs(a.x() - b.x()) <= r && std::abs(a.y() - b.y()) <= r;
+    };
+
+    for (int idx : order) {
+        const QRectF &imgRect = m_selectedRects.at(idx);
+        const QRectF wr(imageToWidgetCoords(imgRect.topLeft()),
+                        imageToWidgetCoords(imgRect.bottomRight()));
+
+        // Corners first
+        if (nearPt(widgetPos, wr.topLeft(), kCornerRadius))
+            return {idx, RectHandle::TopLeft};
+        if (nearPt(widgetPos, wr.topRight(), kCornerRadius))
+            return {idx, RectHandle::TopRight};
+        if (nearPt(widgetPos, wr.bottomLeft(), kCornerRadius))
+            return {idx, RectHandle::BottomLeft};
+        if (nearPt(widgetPos, wr.bottomRight(), kCornerRadius))
+            return {idx, RectHandle::BottomRight};
+
+        // Edges next (grab anywhere along an edge)
+        const bool inY = (widgetPos.y() >= wr.top() - kEdgeTol && widgetPos.y() <= wr.bottom() + kEdgeTol);
+        const bool inX = (widgetPos.x() >= wr.left() - kEdgeTol && widgetPos.x() <= wr.right() + kEdgeTol);
+        if (inY && std::abs(widgetPos.x() - wr.left()) <= kEdgeTol)
+            return {idx, RectHandle::Left};
+        if (inY && std::abs(widgetPos.x() - wr.right()) <= kEdgeTol)
+            return {idx, RectHandle::Right};
+        if (inX && std::abs(widgetPos.y() - wr.top()) <= kEdgeTol)
+            return {idx, RectHandle::Top};
+        if (inX && std::abs(widgetPos.y() - wr.bottom()) <= kEdgeTol)
+            return {idx, RectHandle::Bottom};
+
+        // Interior = move
+        if (wr.contains(widgetPos))
+            return {idx, RectHandle::Move};
+    }
+
+    return {};
+}
+
+Qt::CursorShape MosaicWidget::cursorForHandle(RectHandle handle)
+{
+    switch (handle) {
+    case RectHandle::TopLeft:
+    case RectHandle::BottomRight: return Qt::SizeFDiagCursor;
+    case RectHandle::TopRight:
+    case RectHandle::BottomLeft:  return Qt::SizeBDiagCursor;
+    case RectHandle::Left:
+    case RectHandle::Right:       return Qt::SizeHorCursor;
+    case RectHandle::Top:
+    case RectHandle::Bottom:      return Qt::SizeVerCursor;
+    case RectHandle::Move:        return Qt::SizeAllCursor;
+    case RectHandle::None:
+    default:                      return Qt::ArrowCursor;
+    }
+}
+
 void MosaicWidget::mousePressEvent(QMouseEvent *event)
 {
     if (m_totalWidth == 0) return;
@@ -576,10 +748,34 @@ void MosaicWidget::mousePressEvent(QMouseEvent *event)
         m_selStartPos = event->position();
         m_selCurrentPos = event->position();
     } else if (event->button() == Qt::LeftButton) {
-        m_isPanning = true;
-        setCursor(Qt::ClosedHandCursor);
+        const RectHit hit = hitTestSelection(event->position());
+        if (hit.index >= 0 && hit.handle != RectHandle::None) {
+            m_activeRectIndex = hit.index;
+            m_isEditingRect = true;
+            m_editHandle = hit.handle;
+            m_editStartImgPos = widgetToImageCoords(event->position());
+            m_editOriginalRect = m_selectedRects.at(hit.index);
+            setCursor(cursorForHandle(hit.handle));
+            update();
+        } else {
+            m_isPanning = true;
+            setCursor(Qt::ClosedHandCursor);
+        }
     } else if (event->button() == Qt::RightButton) {
-        m_selectedRects.clear();
+        const RectHit hit = hitTestSelection(event->position());
+        if (hit.index >= 0) {
+            // Right-clicking a specific region removes just that region.
+            m_selectedRects.removeAt(hit.index);
+            m_activeRectIndex = m_selectedRects.isEmpty()
+                ? -1
+                : std::min(hit.index, static_cast<int>(m_selectedRects.size()) - 1);
+        } else {
+            // Right-clicking empty space clears all regions.
+            m_selectedRects.clear();
+            m_activeRectIndex = -1;
+        }
+        m_isEditingRect = false;
+        m_editHandle = RectHandle::None;
         emit selectionsChanged(m_selectedRects);
         update();
     }
@@ -593,7 +789,50 @@ void MosaicWidget::mouseMoveEvent(QMouseEvent *event)
     emit mouseMoved(imgCoords.x(), imgCoords.y());
 
     QPointF delta = event->position() - m_lastMousePos;
-    if (m_isPanning) {
+    if (m_isEditingRect && m_activeRectIndex >= 0 && m_activeRectIndex < m_selectedRects.size()) {
+        const double maxW = static_cast<double>(m_totalWidth);
+        const double maxH = static_cast<double>(m_totalHeight);
+        // Minimum edited size (~0.05 mm or 4 mosaic px) so a region cannot collapse to empty.
+        const double minDim = std::max(4.0, (m_stageWidthMm > 0 ? (maxW / m_stageWidthMm) * 0.05 : 4.0));
+        QRectF r = m_editOriginalRect;
+        const QPointF imgDelta = imgCoords - m_editStartImgPos;
+
+        if (m_editHandle == RectHandle::Move) {
+            const double nx = std::clamp(r.x() + imgDelta.x(), 0.0, std::max(0.0, maxW - r.width()));
+            const double ny = std::clamp(r.y() + imgDelta.y(), 0.0, std::max(0.0, maxH - r.height()));
+            r.moveTopLeft(QPointF(nx, ny));
+        } else {
+            double left = r.left();
+            double right = r.right();
+            double top = r.top();
+            double bottom = r.bottom();
+
+            if (m_editHandle == RectHandle::Left ||
+                m_editHandle == RectHandle::TopLeft ||
+                m_editHandle == RectHandle::BottomLeft) {
+                left = std::clamp(r.left() + imgDelta.x(), 0.0, right - minDim);
+            }
+            if (m_editHandle == RectHandle::Right ||
+                m_editHandle == RectHandle::TopRight ||
+                m_editHandle == RectHandle::BottomRight) {
+                right = std::clamp(r.right() + imgDelta.x(), left + minDim, maxW);
+            }
+            if (m_editHandle == RectHandle::Top ||
+                m_editHandle == RectHandle::TopLeft ||
+                m_editHandle == RectHandle::TopRight) {
+                top = std::clamp(r.top() + imgDelta.y(), 0.0, bottom - minDim);
+            }
+            if (m_editHandle == RectHandle::Bottom ||
+                m_editHandle == RectHandle::BottomLeft ||
+                m_editHandle == RectHandle::BottomRight) {
+                bottom = std::clamp(r.bottom() + imgDelta.y(), top + minDim, maxH);
+            }
+            r = QRectF(QPointF(left, top), QPointF(right, bottom));
+        }
+
+        m_selectedRects[m_activeRectIndex] = r;
+        update();
+    } else if (m_isPanning) {
         m_panOffset += delta;
         clampPanOffset();
         updateScrollbars();
@@ -601,6 +840,13 @@ void MosaicWidget::mouseMoveEvent(QMouseEvent *event)
     } else if (m_isSelecting) {
         m_selCurrentPos = event->position();
         update();
+    } else {
+        if (event->modifiers() & Qt::ShiftModifier) {
+            setCursor(Qt::CrossCursor);
+        } else {
+            const RectHit hit = hitTestSelection(event->position());
+            setCursor(cursorForHandle(hit.handle));
+        }
     }
     m_lastMousePos = event->position();
 }
@@ -609,7 +855,15 @@ void MosaicWidget::mouseReleaseEvent(QMouseEvent *event)
 {
     if (m_totalWidth == 0) return;
 
-    if (m_isSelecting) {
+    if (m_isEditingRect) {
+        m_isEditingRect = false;
+        m_editHandle = RectHandle::None;
+        if (m_activeRectIndex >= 0 && m_activeRectIndex < m_selectedRects.size() &&
+            m_selectedRects.at(m_activeRectIndex) != m_editOriginalRect) {
+            emit selectionsChanged(m_selectedRects);
+        }
+        update();
+    } else if (m_isSelecting) {
         double dist = (event->position() - m_selStartPos).manhattanLength();
         if (dist < 5) {
             QPointF imgCoords = widgetToImageCoords(event->position());
@@ -623,6 +877,7 @@ void MosaicWidget::mouseReleaseEvent(QMouseEvent *event)
             selRect = selRect.intersected(imgBounds);
             if (!selRect.isEmpty()) {
                 m_selectedRects.append(selRect);
+                m_activeRectIndex = m_selectedRects.size() - 1;
                 emit selectionsChanged(m_selectedRects);
                 emit selectionMade(selRect.x(), selRect.y(),
                                    selRect.width(), selRect.height());
@@ -635,5 +890,6 @@ void MosaicWidget::mouseReleaseEvent(QMouseEvent *event)
 
     m_isPanning = false;
     m_isSelecting = false;
-    setCursor(Qt::ArrowCursor);
+    const RectHit hit = hitTestSelection(event->position());
+    setCursor(cursorForHandle(hit.handle));
 }

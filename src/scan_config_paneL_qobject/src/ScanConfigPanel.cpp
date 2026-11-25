@@ -68,7 +68,21 @@ ScanConfigPanel::ScanConfigPanel(QWidget *parent)
 void ScanConfigPanel::updateScanAreas(const QVector<QRectF> &areas)
 {
     m_scanAreas = areas;
-    m_scanAreaLabel->setText(QString("Scan Area: %1 area(s) selected").arg(areas.size()));
+    if (areas.isEmpty()) {
+        m_scanAreaLabel->setText("Scan Area: (Shift+drag on mosaic to select; drag/edges to edit)");
+    } else if (areas.size() == 1) {
+        const QRectF &r = areas.first();
+        m_scanAreaLabel->setText(
+            QString("Scan Area: X %1-%2, Y %3-%4 mm (%5 x %6 mm)")
+                .arg(r.left(), 0, 'f', 2)
+                .arg(r.right(), 0, 'f', 2)
+                .arg(r.top(), 0, 'f', 2)
+                .arg(r.bottom(), 0, 'f', 2)
+                .arg(r.width(), 0, 'f', 2)
+                .arg(r.height(), 0, 'f', 2));
+    } else {
+        m_scanAreaLabel->setText(QString("Scan Area: %1 areas selected").arg(areas.size()));
+    }
     m_startButton->setEnabled(!areas.isEmpty());
     scanFinished(false);
 }

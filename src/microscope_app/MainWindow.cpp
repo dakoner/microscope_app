@@ -763,6 +763,16 @@ MainWindow::MainWindow(QWidget *parent)
         ui->mainToolbar->addAction(m_actionSaveWaypoint);
     }
 
+    m_actionInvertedMode = new QAction("Inverted Microscope", this);
+    m_actionInvertedMode->setCheckable(true);
+    m_actionInvertedMode->setToolTip(
+        "Flip camera frames vertically for inverted microscope optics (objective below stage).");
+    if (ui->menuView) {
+        ui->menuView->addSeparator();
+        ui->menuView->addAction(m_actionInvertedMode);
+    }
+    connect(m_actionInvertedMode, &QAction::toggled, this, &MainWindow::onMicroscopeModeChanged);
+
 #if MICROSCOPE_ENABLE_YOLO
     // YOLO Inference Worker
     m_yoloWorker = new YOLOInferenceWorker(this);
@@ -838,6 +848,10 @@ MainWindow::MainWindow(QWidget *parent)
     // Camera frame signal – connect to frameReady
     connect(m_camera, &MindVisionCamera::frameReady, this,
             [this](QImage image, qint64 ts) {
+        if (m_microscopeInverted && !image.isNull()) {
+            image = image.mirrored(false, true);
+        }
+
         const double frameTimestampSec = resolveFrameTimestampSec(ts);
         ++m_framesReceivedCount;
         updateFrameStatsLabel();
@@ -1072,6 +1086,14 @@ void MainWindow::createCameraConnectionPanel()
     m_comboCameraMode->addItem("Remote (camera_server TCP)", "remote");
     form->addRow("Mode:", m_comboCameraMode);
 
+    m_comboMicroscopeMode = new QComboBox(m_cameraConnectionGroup);
+    m_comboMicroscopeMode->addItem("Upright (Objective Top)", "upright");
+    m_comboMicroscopeMode->addItem("Inverted (Objective Bottom)", "inverted");
+    m_comboMicroscopeMode->setToolTip(
+        "Upright: standard top-down optics.\n"
+        "Inverted: flips frames vertically on-screen, in recordings, and in the mosaic to match stage axes.");
+    form->addRow("Optics:", m_comboMicroscopeMode);
+
     m_editRemoteHost = new QLineEdit("127.0.0.1", m_cameraConnectionGroup);
     m_editRemoteHost->setPlaceholderText("127.0.0.1 or remote IP");
     form->addRow("Remote Host:", m_editRemoteHost);
@@ -1102,6 +1124,10 @@ void MainWindow::createCameraConnectionPanel()
 
     connect(m_comboCameraMode, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::onCameraConnectionModeChanged);
+    connect(m_comboMicroscopeMode, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int index) {
+                onMicroscopeModeChanged(index == 1);
+            });
     connect(m_btnConnectCamera, &QPushButton::clicked,
             this, &MainWindow::onReconnectCameraClicked);
     connect(m_spinRemoteJpegQuality, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -1176,6 +1202,41 @@ void MainWindow::updateCameraConnectionStatusLabel()
             QString("Status: Local SDK (%1)")
                 .arg(m_isCameraRunning ? "Streaming" : "Stopped"));
     }
+}
+
+void MainWindow::onMicroscopeModeChanged(bool inverted)
+{
+    const bool changed = (m_microscopeInverted != inverted);
+    m_microscopeInverted = inverted;
+
+    if (m_comboMicroscopeMode) {
+        const int wantIdx = inverted ? 1 : 0;
+        if (m_comboMicroscopeMode->currentIndex() != wantIdx) {
+            QSignalBlocker blocker(m_comboMicroscopeMode);
+            m_comboMicroscopeMode->setCurrentIndex(wantIdx);
+        }
+    }
+    if (m_actionInvertedMode && m_actionInvertedMode->isChecked() != inverted) {
+        QSignalBlocker blocker(m_actionInvertedMode);
+        m_actionInvertedMode->setChecked(inverted);
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    if (!m_currentImage.isNull()) {
+        m_currentImage = m_currentImage.mirrored(false, true);
+        m_currentPixmap = QPixmap::fromImage(m_currentImage);
+        refreshVideoLabel();
+    }
+    if (m_mosaicPanel) {
+        m_mosaicPanel->clearMosaic();
+    }
+
+    log(inverted
+            ? QStringLiteral("Microscope mode: Inverted (vertical image flip enabled; mosaic cleared).")
+            : QStringLiteral("Microscope mode: Upright (vertical image flip disabled; mosaic cleared)."));
 }
 
 void MainWindow::onReconnectCameraClicked()
@@ -1889,6 +1950,16 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) &&
+        !isTextInputFocused() && m_centerTabs && m_centerTabs->currentWidget() == m_mosaicTabContainer &&
+        m_mosaicPanel && m_mosaicPanel->displayWidget()) {
+        if (m_mosaicPanel->displayWidget()->removeActiveSelection()) {
+            log("Removed active scan region.");
+            event->accept();
+            return;
+        }
+    }
+
     if (handleJogKeyEvent(event, true)) {
         event->accept();
         return;
@@ -2096,11 +2167,12 @@ void MainWindow::centerStageOnImagePoint(const QPointF &imagePos)
         stageDv = -du;
     }
 
-    // Empirically verified on the stage: +X moves image features left (-u),
-    // while +Y moves image features down (+v, since image +v points downward
-    // and stage +Y points upward).  So centering (du, dv) needs (+dx, -dy).
+    // Incoming frames are already normalized to canonical top-down orientation
+    // (Inverted mode flips frames vertically in frameReady), where +X shifts
+    // image features left (-u) and +Y shifts image features up (-v).  So
+    // centering (du, dv) always moves the stage by (+du / scaleX, +dv / scaleY).
     double dxMm = stageDu / scaleX;
-    double dyMm = -stageDv / scaleY;
+    double dyMm = stageDv / scaleY;
 
     constexpr double kSoftLimitMarginMm = 0.5;
     const double stageW = m_stageSettings.value("stage_width_mm").toDouble();
@@ -3929,6 +4001,8 @@ void MainWindow::writeScanMetadataFile(int imageWidth, int imageHeight, bool com
     root["scan_scale_x_px_per_mm"] = scanScaleXPxPerMm();
     root["scan_scale_y_px_per_mm"] = scanScaleYPxPerMm();
     root["scan_camera_rotation_deg"] = m_scanCameraRotationDeg;
+    root["microscope_mode"] = m_microscopeInverted ? QStringLiteral("inverted")
+                                                   : QStringLiteral("upright");
 
     QJsonObject scanArea;
     scanArea["x_min"] = m_scanXMin;
@@ -4139,6 +4213,10 @@ void MainWindow::loadSettings()
             const QString mode = settings.value("camera_mode").toString("local").toLower();
             m_comboCameraMode->setCurrentIndex(mode == "remote" ? 1 : 0);
         }
+        if (settings.contains("microscope_mode")) {
+            const QString opticsMode = settings.value("microscope_mode").toString("upright").toLower();
+            onMicroscopeModeChanged(opticsMode == "inverted");
+        }
         if (settings.contains("remote_camera_host") && m_editRemoteHost) {
             m_editRemoteHost->setText(settings.value("remote_camera_host").toString("127.0.0.1"));
         }
@@ -4264,6 +4342,9 @@ void MainWindow::saveSettings()
     settings["camera_mode"] = (m_comboCameraMode && m_comboCameraMode->currentIndex() == 1)
                                   ? QStringLiteral("remote")
                                   : QStringLiteral("local");
+    settings["microscope_mode"] = m_microscopeInverted
+                                      ? QStringLiteral("inverted")
+                                      : QStringLiteral("upright");
     if (m_editRemoteHost)
         settings["remote_camera_host"] = m_editRemoteHost->text().trimmed();
     if (m_spinRemotePort)
