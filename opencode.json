@@ -1,0 +1,14 @@
+{
+  "mcp": {
+    "servers": {
+      "microscope-hardware": {
+        "type": "remote",
+        "url": "http://127.0.0.1:8765/mcp"
+      },
+      "microscope-app": {
+        "type": "remote",
+        "url": "http://127.0.0.1:8767/mcp"
+      }
+    }
+  }
+}

@@ -65,6 +65,9 @@ public:
     bool isContinuousJogActive() const { return m_continuousJogActive; }
     void setContinuousJogVector(int dx, int dy, int dz, bool fineModifier = false);
     void stopContinuousJog();
+    // Single-shot relative XY jog (e.g. click-to-center) that clears any
+    // pending continuous-jog stop retries so it is never cancelled prematurely.
+    void sendRelativeXyJog(double dxMm, double dyMm, int feedrate = 0);
 
 signals:
     void logSignal(const QString &msg);
@@ -108,6 +111,7 @@ private slots:
     void advanceAutofocus();
     void dispatchContinuousJog();
     void checkContinuousJogContinuation();
+    void retryPendingJogStop();
 
 private:
     enum class PendingScanEvent {
@@ -208,6 +212,9 @@ private:
     QComboBox *m_jogSpeedCombo = nullptr;
     QTimer m_jogDispatchTimer;
     QTimer m_jogContinueTimer;
+    QTimer m_jogStopTimer;
+    QElapsedTimer m_jogChunkClock;
+    QElapsedTimer m_jogStopClock;
     double m_stageWidthMm = 0.0;
     double m_stageHeightMm = 0.0;
     int m_jogDx = 0;
@@ -215,6 +222,10 @@ private:
     int m_jogDz = 0;
     bool m_jogFineModifier = false;
     bool m_continuousJogActive = false;
+    bool m_zHoldPending = false;
+    bool m_jogSawRunning = false;
+    bool m_jogStopPending = false;
+    qint64 m_jogMinChunkMs = 0;
 };
 
 #endif // CNCCONTROLPANEL_H

@@ -46,6 +46,9 @@
 #include <ctime>
 #include <algorithm>
 #include <limits>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "MindVisionCamera.h"
 #include "VideoThread.h"
@@ -68,6 +71,71 @@ static MainWindow *g_mainWindowForPython = nullptr;
 namespace {
 constexpr double kMinimumExposureMs = 0.001;
 constexpr double kExposureSliderStepMs = 0.001;
+
+#ifdef _WIN32
+int qtJogKeyToWindowsVk(int key)
+{
+    switch (key) {
+    case Qt::Key_Left:     return VK_LEFT;
+    case Qt::Key_Right:    return VK_RIGHT;
+    case Qt::Key_Up:       return VK_UP;
+    case Qt::Key_Down:     return VK_DOWN;
+    case Qt::Key_PageUp:   return VK_PRIOR;
+    case Qt::Key_PageDown: return VK_NEXT;
+    case Qt::Key_A:        return 'A';
+    case Qt::Key_D:        return 'D';
+    case Qt::Key_W:        return 'W';
+    case Qt::Key_S:        return 'S';
+    case Qt::Key_E:        return 'E';
+    case Qt::Key_Q:        return 'Q';
+    default:               return 0;
+    }
+}
+
+bool isPhysicalJogKeyDown(int key)
+{
+    const int vk = qtJogKeyToWindowsVk(key);
+    return vk != 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+#endif
+
+// Application-level event filter so key-release and app-deactivation events can
+// never be swallowed by a focused child widget while continuous jogging is active.
+class JogReleaseEventFilter : public QObject
+{
+public:
+    JogReleaseEventFilter(std::function<bool(QKeyEvent *)> onKeyRelease,
+                          std::function<void()> onDeactivate,
+                          QObject *parent = nullptr)
+        : QObject(parent)
+        , m_onKeyRelease(std::move(onKeyRelease))
+        , m_onDeactivate(std::move(onDeactivate))
+    {}
+
+protected:
+    bool eventFilter(QObject *, QEvent *event) override
+    {
+        if (!event) {
+            return false;
+        }
+        if (event->type() == QEvent::ApplicationDeactivate) {
+            if (m_onDeactivate) {
+                m_onDeactivate();
+            }
+            return false;
+        }
+        if (event->type() == QEvent::KeyRelease) {
+            if (m_onKeyRelease && m_onKeyRelease(static_cast<QKeyEvent *>(event))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+private:
+    std::function<bool(QKeyEvent *)> m_onKeyRelease;
+    std::function<void()> m_onDeactivate;
+};
 }
 
 // ---------- helpers ----------
@@ -648,6 +716,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_videoLabel->installEventFilter(this);
     m_videoLabel->setFocusPolicy(Qt::StrongFocus);
     m_videoLabel->setMouseTracking(true);
+    m_videoLabel->setCursor(Qt::CrossCursor);
     m_mainSplitter->setSizes({400, 1000});
     m_triggerBg->setId(m_rbContinuous, 0);
     m_triggerBg->setId(m_rbSoftware, 1);
@@ -787,14 +856,51 @@ MainWindow::MainWindow(QWidget *parent)
     // Param poll timer
     connect(&m_paramPollTimer, &QTimer::timeout, this, &MainWindow::pollCameraParams);
 
-    // Dead-man watchdog: if the window loses focus without delivering a key release,
-    // immediately cancel continuous keyboard jogging.
+    // Dead-man watchdog: if the window loses focus or Windows drops a WM_KEYUP,
+    // immediately prune released keys and cancel continuous keyboard jogging.
     connect(&m_jogWatchdogTimer, &QTimer::timeout, this, [this]() {
         if (!isActiveWindow() || m_isScanning ||
             (m_cncControlPanel && m_cncControlPanel->isAutofocusActive())) {
             clearKeyboardJog();
+            return;
         }
+#ifdef _WIN32
+        bool changed = false;
+        for (auto it = m_physicallyHeldJogKeys.begin(); it != m_physicallyHeldJogKeys.end();) {
+            if (!isPhysicalJogKeyDown(*it)) {
+                m_heldJogKeys.remove(*it);
+                it = m_physicallyHeldJogKeys.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
+        if (changed) {
+            updateKeyboardJog();
+        }
+#endif
     });
+
+    if (qApp) {
+        m_jogReleaseFilter = new JogReleaseEventFilter(
+            [this](QKeyEvent *ke) -> bool {
+                if (!ke) {
+                    return false;
+                }
+                if (ke->key() == Qt::Key_Shift && !ke->isAutoRepeat() && !m_heldJogKeys.isEmpty()) {
+                    m_jogShiftHeld = false;
+                    updateKeyboardJog();
+                    return false;
+                }
+                if (m_heldJogKeys.contains(ke->key())) {
+                    return handleJogKeyEvent(ke, false);
+                }
+                return false;
+            },
+            [this]() { clearKeyboardJog(); },
+            this);
+        qApp->installEventFilter(m_jogReleaseFilter);
+    }
 
     // CNC panel
     if (m_cncControlPanel) {
@@ -844,6 +950,9 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    if (qApp && m_jogReleaseFilter) {
+        qApp->removeEventFilter(m_jogReleaseFilter);
+    }
     if (g_mainWindowForPython == this) {
         g_mainWindowForPython = nullptr;
     }
@@ -1558,6 +1667,17 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                 if (pos.x() >= 0 && pos.y() >= 0)
                     updateColorPicker(pos);
             }
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::LeftButton &&
+                !(me->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+                m_videoLabel->setFocus();
+                const QPointF pos = getImageCoords(me->position());
+                if (pos.x() >= 0 && pos.y() >= 0) {
+                    centerStageOnImagePoint(pos);
+                    return true;
+                }
+            }
         }
     } else if (m_mosaicPanel && watched == m_mosaicPanel->displayWidget()) {
         if (event->type() == QEvent::KeyPress) {
@@ -1684,8 +1804,14 @@ bool MainWindow::handleJogKeyEvent(QKeyEvent *event, bool pressed)
     m_jogShiftHeld = (event->modifiers() & Qt::ShiftModifier) != 0;
     if (pressed) {
         m_heldJogKeys.insert(key);
+#ifdef _WIN32
+        if (isPhysicalJogKeyDown(key)) {
+            m_physicallyHeldJogKeys.insert(key);
+        }
+#endif
     } else {
         m_heldJogKeys.remove(key);
+        m_physicallyHeldJogKeys.remove(key);
     }
     updateKeyboardJog();
     return true;
@@ -1714,7 +1840,7 @@ void MainWindow::updateKeyboardJog()
     }
 
     if (!m_jogWatchdogTimer.isActive()) {
-        m_jogWatchdogTimer.start(200);
+        m_jogWatchdogTimer.start(80);
     }
     m_cncControlPanel->setContinuousJogVector(dx, dy, dz, m_jogShiftHeld);
 }
@@ -1722,6 +1848,7 @@ void MainWindow::updateKeyboardJog()
 void MainWindow::clearKeyboardJog()
 {
     m_heldJogKeys.clear();
+    m_physicallyHeldJogKeys.clear();
     m_jogShiftHeld = false;
     m_jogWatchdogTimer.stop();
     if (m_cncControlPanel) {
@@ -1868,6 +1995,24 @@ void MainWindow::refreshVideoLabel()
     }
 #endif
 
+    // Draw brief click-to-center target indicator
+    if (m_clickCenterMarkerExpireMs > 0 &&
+        QDateTime::currentMSecsSinceEpoch() < m_clickCenterMarkerExpireMs) {
+        QPainter painter(&display);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const QPointF center(display.width() / 2.0, display.height() / 2.0);
+        painter.setPen(QPen(QColor(0, 229, 255, 160), 1.5, Qt::DashLine));
+        painter.drawLine(m_clickCenterMarker, center);
+        painter.setPen(QPen(QColor(0, 229, 255, 230), 2.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(m_clickCenterMarker, 12.0, 12.0);
+        painter.drawLine(QPointF(m_clickCenterMarker.x() - 18.0, m_clickCenterMarker.y()),
+                         QPointF(m_clickCenterMarker.x() + 18.0, m_clickCenterMarker.y()));
+        painter.drawLine(QPointF(m_clickCenterMarker.x(), m_clickCenterMarker.y() - 18.0),
+                         QPointF(m_clickCenterMarker.x(), m_clickCenterMarker.y() + 18.0));
+        painter.end();
+    }
+
     m_videoLabel->setPixmap(display.scaled(labelSize, Qt::KeepAspectRatio, Qt::FastTransformation));
     m_lastVideoLabelSize = labelSize;
 
@@ -1900,6 +2045,103 @@ QPointF MainWindow::getImageCoords(const QPointF &mousePos)
         return {-1, -1};
 
     return {(mx - offX) / scale, (my - offY) / scale};
+}
+
+void MainWindow::centerStageOnImagePoint(const QPointF &imagePos)
+{
+    if (!m_cncControlPanel || m_currentPixmap.isNull())
+        return;
+
+    if (m_isScanning) {
+        log("Click-to-Center ignored: a mosaic scan is in progress.");
+        return;
+    }
+    if (m_cncControlPanel->isAutofocusActive()) {
+        log("Click-to-Center ignored: autofocus is running.");
+        return;
+    }
+
+    const double scaleX = scanScaleXPxPerMm();
+    const double scaleY = scanScaleYPxPerMm();
+    if (scaleX <= 0.0 || scaleY <= 0.0) {
+        const QString msg = QStringLiteral("Click-to-Center requires ruler calibration first.");
+        log(msg);
+        statusBar()->showMessage(msg, 4000);
+        return;
+    }
+
+    if (!m_cncControlPanel->isStageConnected() || !m_cncControlPanel->hasControllerStatus()) {
+        const QString msg = QStringLiteral("Click-to-Center: CNC stage is not connected.");
+        log(msg);
+        statusBar()->showMessage(msg, 4000);
+        return;
+    }
+
+    const double du = imagePos.x() - (m_currentPixmap.width() / 2.0);
+    const double dv = imagePos.y() - (m_currentPixmap.height() / 2.0);
+
+    // Map clicked image offset into stage axes, accounting for any configured
+    // camera rotation (same convention as orientScanCompositeFrame).
+    double stageDu = du;
+    double stageDv = dv;
+    const int rot = ((m_scanCameraRotationDeg % 360) + 360) % 360;
+    if (rot == 90) {
+        stageDu = -dv;
+        stageDv = du;
+    } else if (rot == 180) {
+        stageDu = -du;
+        stageDv = -dv;
+    } else if (rot == 270) {
+        stageDu = dv;
+        stageDv = -du;
+    }
+
+    // Empirically verified on the stage: +X moves image features left (-u),
+    // while +Y moves image features down (+v, since image +v points downward
+    // and stage +Y points upward).  So centering (du, dv) needs (+dx, -dy).
+    double dxMm = stageDu / scaleX;
+    double dyMm = -stageDv / scaleY;
+
+    constexpr double kSoftLimitMarginMm = 0.5;
+    const double stageW = m_stageSettings.value("stage_width_mm").toDouble();
+    const double stageH = m_stageSettings.value("stage_height_mm").toDouble();
+    if (m_hasCncPosition && stageW > 2.0 * kSoftLimitMarginMm &&
+        m_currentCncXMm >= -1.0 && m_currentCncXMm <= stageW + 1.0) {
+        const double clampedX = std::clamp(m_currentCncXMm + dxMm,
+                                           kSoftLimitMarginMm, stageW - kSoftLimitMarginMm);
+        dxMm = clampedX - m_currentCncXMm;
+    }
+    if (m_hasCncPosition && stageH > 2.0 * kSoftLimitMarginMm &&
+        m_currentCncYMm >= -1.0 && m_currentCncYMm <= stageH + 1.0) {
+        const double clampedY = std::clamp(m_currentCncYMm + dyMm,
+                                           kSoftLimitMarginMm, stageH - kSoftLimitMarginMm);
+        dyMm = clampedY - m_currentCncYMm;
+    }
+
+    if (std::hypot(dxMm, dyMm) < 0.001)
+        return;
+
+    m_heldJogKeys.clear();
+    m_physicallyHeldJogKeys.clear();
+    m_jogShiftHeld = false;
+    m_jogWatchdogTimer.stop();
+
+    const int feedrate = m_cncControlPanel->feedrate();
+    m_cncControlPanel->sendRelativeXyJog(dxMm, dyMm, feedrate);
+
+    m_clickCenterMarker = imagePos;
+    m_clickCenterMarkerExpireMs = QDateTime::currentMSecsSinceEpoch() + 650;
+    refreshVideoLabel();
+
+    const QString msg = QString("Click-to-Center: px(%1, %2) -> dX=%3 mm, dY=%4 mm (scale %5/%6 px/mm)")
+                            .arg(du, 0, 'f', 0)
+                            .arg(dv, 0, 'f', 0)
+                            .arg(dxMm, 0, 'f', 3)
+                            .arg(dyMm, 0, 'f', 3)
+                            .arg(scaleX, 0, 'f', 1)
+                            .arg(scaleY, 0, 'f', 1);
+    log(msg);
+    statusBar()->showMessage(msg, 3000);
 }
 
 // ---------- Camera ----------

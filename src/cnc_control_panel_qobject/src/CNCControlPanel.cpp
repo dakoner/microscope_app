@@ -76,6 +76,7 @@ CNCControlPanel::CNCControlPanel(QWidget *parent)
     m_jogDispatchTimer.setSingleShot(true);
     connect(&m_jogDispatchTimer, &QTimer::timeout, this, &CNCControlPanel::dispatchContinuousJog);
     connect(&m_jogContinueTimer, &QTimer::timeout, this, &CNCControlPanel::checkContinuousJogContinuation);
+    connect(&m_jogStopTimer, &QTimer::timeout, this, &CNCControlPanel::retryPendingJogStop);
 
     refreshSerialPorts();
     onSerialStatusChanged(false);
@@ -466,6 +467,7 @@ void CNCControlPanel::onLogMessage(const std::string &msg)
 
             m_waitingForOk = false;
 
+            const bool wasJogCmd = m_lastSentCommand.startsWith(QLatin1String("$J="));
             if (m_lastSentCommand.contains("SCAN_START") && kind == RxOk) {
                 emit scanStartReady();
                 emit logSignal("Initial scan move complete.");
@@ -480,6 +482,14 @@ void CNCControlPanel::onLogMessage(const std::string &msg)
                 emit scanFinished();
                 emit logSignal("Scan finished.");
                 m_lastSentCommand.clear();
+            } else if (wasJogCmd) {
+                m_lastSentCommand.clear();
+                // If the user already released the jog key before this $J= was
+                // accepted by FluidNC, send 0x85 right now so the newly queued
+                // jog is cancelled immediately instead of running away.
+                if (m_jogStopPending && !m_continuousJogActive) {
+                    sendJogCancel();
+                }
             }
 
             processQueue();
@@ -522,6 +532,20 @@ void CNCControlPanel::parseStatus(const QString &statusStr)
         if (m_focusPhase != FocusPhase::Inactive &&
             (parts[0] == QLatin1String("Alarm") || parts[0] == QLatin1String("Check"))) {
             cancelAutofocus(QString("Autofocus aborted: the controller reported %1.").arg(parts[0]));
+        }
+        if (m_continuousJogActive &&
+            (parts[0] == QLatin1String("Jog") || parts[0] == QLatin1String("Run"))) {
+            m_jogSawRunning = true;
+        }
+        if (m_jogStopPending) {
+            if (parts[0] == QLatin1String("Jog")) {
+                // Controller is still jogging after release: re-issue 0x85 immediately.
+                sendJogCancel();
+            } else if (parts[0] == QLatin1String("Idle") && !m_waitingForOk &&
+                       m_jogStopClock.elapsed() >= 150) {
+                m_jogStopPending = false;
+                m_jogStopTimer.stop();
+            }
         }
         if (m_continuousJogActive &&
             (parts[0] == QLatin1String("Alarm") || parts[0] == QLatin1String("Check"))) {
@@ -1100,18 +1124,41 @@ void CNCControlPanel::setContinuousJogVector(int dx, int dy, int dz, bool fineMo
     }
 
     const bool hadActiveJog = m_continuousJogActive;
+    m_jogStopPending = false;
+    m_jogStopTimer.stop();
     m_jogDx = dx;
     m_jogDy = dy;
     m_jogDz = dz;
     m_jogFineModifier = fineModifier;
 
+    // Pure Z press (PageUp/PageDown/E/Q) starts with a single exact fine step
+    // (m_zStepSize, scaled by Shift/Fine) so quick taps nudge focus cleanly by
+    // 10 um instead of blowing past the focal plane; holding > 220 ms transitions
+    // into a slow, controllable continuous Z focus sweep.
+    const bool pureZ = (dx == 0 && dy == 0 && dz != 0);
+    if (pureZ && !hadActiveJog) {
+        m_jogDispatchTimer.stop();
+        m_jogContinueTimer.stop();
+        const double mult = computeJogSpeedMultiplier(fineModifier);
+        const double stepScale = (mult < 1.0) ? mult : 1.0;
+        const double stepMm = std::max(0.001, m_zStepSize * stepScale);
+        sendCommand(QString("$J=G91 Z%1 F%2")
+                        .arg(dz * stepMm, 0, 'f', 4)
+                        .arg(m_zFeedrate));
+        m_zHoldPending = true;
+        m_jogDispatchTimer.start(220);
+        return;
+    }
+
+    m_zHoldPending = false;
     if (hadActiveJog) {
         // Smoothly cancel the previous jog vector and wait briefly so FluidNC
         // processes 0x85 before accepting the new $J= command.
         sendJogCancel();
         m_continuousJogActive = false;
+        m_jogSawRunning = false;
         m_jogContinueTimer.stop();
-        m_jogDispatchTimer.start(25);
+        m_jogDispatchTimer.start(35);
     } else {
         m_jogDispatchTimer.stop();
         dispatchContinuousJog();
@@ -1120,16 +1167,26 @@ void CNCControlPanel::setContinuousJogVector(int dx, int dy, int dz, bool fineMo
 
 void CNCControlPanel::dispatchContinuousJog()
 {
+    m_zHoldPending = false;
     if ((m_jogDx == 0 && m_jogDy == 0 && m_jogDz == 0) ||
         !isStageConnected() || !hasControllerStatus() ||
         m_focusPhase != FocusPhase::Inactive || !m_autofocusAllowed) {
         m_continuousJogActive = false;
+        m_jogSawRunning = false;
         m_jogContinueTimer.stop();
         return;
     }
 
-    constexpr double kMaxXyChunkMm = 25.0;
-    constexpr double kMaxZChunkMm = 2.0;
+    const double mult = computeJogSpeedMultiplier(m_jogFineModifier);
+    const int xyFeed = std::clamp(static_cast<int>(std::lround(m_xyFeedrate * mult)), 5, 1000);
+    // Manual continuous Z focus needs to stay slow relative to microscope depth of field
+    // (~15 mm/min Normal, ~3 mm/min Fine/Shift, ~30 mm/min Fast when Z F=100).
+    const int zFeed = std::clamp(static_cast<int>(std::lround(m_zFeedrate * 0.15 * mult)), 2, 60);
+
+    // Bound each continuous jog chunk to ~1.5 s of travel (capped at 10 mm XY / 0.5 mm Z)
+    // so even a dropped link stops quickly instead of running away across the stage.
+    const double maxXyChunkMm = std::clamp((xyFeed / 60.0) * 1.5, 0.5, 10.0);
+    const double maxZChunkMm = std::clamp((zFeed / 60.0) * 1.5, 0.05, 0.5);
     constexpr double kSoftLimitMarginMm = 0.5;
     constexpr double kMinTravelMm = 0.005;
 
@@ -1150,9 +1207,9 @@ void CNCControlPanel::dispatchContinuousJog()
         return std::min(maxChunk, avail);
     };
 
-    double travelX = computeAxisTravel(m_jogDx, m_lastXPosition, m_stageWidthMm, kMaxXyChunkMm);
-    double travelY = computeAxisTravel(m_jogDy, m_lastYPosition, m_stageHeightMm, kMaxXyChunkMm);
-    double travelZ = (m_jogDz != 0) ? kMaxZChunkMm : 0.0;
+    double travelX = computeAxisTravel(m_jogDx, m_lastXPosition, m_stageWidthMm, maxXyChunkMm);
+    double travelY = computeAxisTravel(m_jogDy, m_lastYPosition, m_stageHeightMm, maxXyChunkMm);
+    double travelZ = (m_jogDz != 0) ? maxZChunkMm : 0.0;
 
     // Keep diagonal jogs at a true 45-degree angle unless one axis is already at its soft limit.
     if (m_jogDx != 0 && m_jogDy != 0) {
@@ -1177,13 +1234,11 @@ void CNCControlPanel::dispatchContinuousJog()
     if (axisTokens.isEmpty()) {
         // Already at the soft-limit boundary for all held axes.
         m_continuousJogActive = false;
+        m_jogSawRunning = false;
         m_jogContinueTimer.stop();
         return;
     }
 
-    const double mult = computeJogSpeedMultiplier(m_jogFineModifier);
-    const int xyFeed = std::clamp(static_cast<int>(std::lround(m_xyFeedrate * mult)), 5, 1000);
-    const int zFeed = std::clamp(static_cast<int>(std::lround(m_zFeedrate * mult)), 2, 100);
     const bool hasXy = (m_jogDx != 0 && travelX >= kMinTravelMm) || (m_jogDy != 0 && travelY >= kMinTravelMm);
     const bool hasZ = (m_jogDz != 0 && travelZ >= kMinTravelMm);
     int feed = xyFeed;
@@ -1192,6 +1247,12 @@ void CNCControlPanel::dispatchContinuousJog()
     } else if (hasZ) {
         feed = zFeed;
     }
+
+    const double chunkDistMm = std::sqrt(travelX * travelX + travelY * travelY + travelZ * travelZ);
+    const double expectedMs = (feed > 0) ? (60000.0 * chunkDistMm / feed) : 500.0;
+    m_jogMinChunkMs = std::max<qint64>(350, static_cast<qint64>(expectedMs * 0.7));
+    m_jogSawRunning = false;
+    m_jogChunkClock.restart();
 
     const QString cmd = QString("$J=G91 %1 F%2").arg(axisTokens.join(QLatin1Char(' '))).arg(feed);
     sendCommand(cmd);
@@ -1205,24 +1266,92 @@ void CNCControlPanel::checkContinuousJogContinuation()
         m_jogContinueTimer.stop();
         return;
     }
-    // If a long hold finishes a bounded 25 mm (XY) or 2 mm (Z) chunk and the
-    // controller reports Idle while keys remain held, seamlessly continue.
-    if (m_lastState == QLatin1String("Idle") && !m_waitingForOk && m_commandQueue.isEmpty()) {
+    // Wait until the controller actually ran the previous chunk (or enough time
+    // has passed) before queuing another chunk, so a stale Idle status right
+    // after dispatch never double-queues a second $J=.
+    const bool chunkFinished = m_jogSawRunning
+        ? (m_lastState == QLatin1String("Idle"))
+        : (m_lastState == QLatin1String("Idle") && m_jogChunkClock.elapsed() >= m_jogMinChunkMs);
+    if (chunkFinished && !m_waitingForOk && m_commandQueue.isEmpty()) {
         dispatchContinuousJog();
     }
+}
+
+void CNCControlPanel::retryPendingJogStop()
+{
+    if (!m_jogStopPending || !isStageConnected()) {
+        m_jogStopPending = false;
+        m_jogStopTimer.stop();
+        return;
+    }
+
+    const qint64 elapsed = m_jogStopClock.elapsed();
+    if (elapsed > 1500) {
+        m_jogStopPending = false;
+        m_jogStopTimer.stop();
+        return;
+    }
+
+    // Re-send 0x85 while the controller is still reporting Jog, or during the
+    // first 200 ms after release to eliminate the $J= vs 0x85 ISR race.
+    if (m_lastState == QLatin1String("Jog") || elapsed < 200) {
+        sendJogCancel();
+    }
+    pollStatus();
 }
 
 void CNCControlPanel::stopContinuousJog()
 {
     m_jogDispatchTimer.stop();
     m_jogContinueTimer.stop();
-    const bool wasActive = m_continuousJogActive || m_jogDx != 0 || m_jogDy != 0 || m_jogDz != 0;
+    // Only send 0x85 Jog Cancel if a continuous sweep was actually active; a quick
+    // pure-Z tap (m_zHoldPending) should finish its exact fine Z step cleanly.
+    const bool needsCancel = m_continuousJogActive;
     m_jogDx = 0;
     m_jogDy = 0;
     m_jogDz = 0;
     m_jogFineModifier = false;
     m_continuousJogActive = false;
-    if (wasActive) {
+    m_zHoldPending = false;
+    m_jogSawRunning = false;
+    if (needsCancel) {
+        m_jogStopPending = true;
+        m_jogStopClock.restart();
         sendJogCancel();
+        if (isStageConnected()) {
+            pollStatus();
+            m_jogStopTimer.start(50);
+        }
+    }
+}
+
+void CNCControlPanel::sendRelativeXyJog(double dxMm, double dyMm, int feedrate)
+{
+    m_jogDispatchTimer.stop();
+    m_jogContinueTimer.stop();
+    m_jogStopTimer.stop();
+    const bool hadActiveContinuous = m_continuousJogActive;
+    m_jogDx = 0;
+    m_jogDy = 0;
+    m_jogDz = 0;
+    m_jogFineModifier = false;
+    m_continuousJogActive = false;
+    m_zHoldPending = false;
+    m_jogSawRunning = false;
+    m_jogStopPending = false;
+
+    if (hadActiveContinuous) {
+        sendJogCancel();
+    }
+
+    const int f = (feedrate > 0) ? feedrate : m_xyFeedrate;
+    const QString cmd = QString("$J=G91 X%1 Y%2 F%3")
+                            .arg(dxMm, 0, 'f', 4)
+                            .arg(dyMm, 0, 'f', 4)
+                            .arg(f);
+    if (hadActiveContinuous) {
+        QTimer::singleShot(35, this, [this, cmd]() { sendCommand(cmd); });
+    } else {
+        sendCommand(cmd);
     }
 }

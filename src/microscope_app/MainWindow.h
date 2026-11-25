@@ -222,6 +222,7 @@ private:
     void refreshVideoLabel();
     void updateFrameStatsLabel();
     QPointF getImageCoords(const QPointF &mousePos);
+    void centerStageOnImagePoint(const QPointF &imagePos);
     void updateRulerStats();
     void updateIntensityProfile(QPointF p1, QPointF p2, const QImage *image = nullptr);
     void updateHistogram(const QImage &image);
@@ -386,6 +387,10 @@ private:
     // Color picker
     bool m_colorPickerActive = false;
 
+    // Click-to-center visual indicator
+    QPointF m_clickCenterMarker;
+    qint64 m_clickCenterMarkerExpireMs = 0;
+
     // Stage settings
     QVariantMap m_stageSettings;
     bool m_stageAutoConnect = false;
@@ -393,7 +398,9 @@ private:
     // Timer
     QTimer m_paramPollTimer;
     QTimer m_jogWatchdogTimer;
+    QObject *m_jogReleaseFilter = nullptr;
     QSet<int> m_heldJogKeys;
+    QSet<int> m_physicallyHeldJogKeys;
     bool m_jogShiftHeld = false;
 
     // Ui
