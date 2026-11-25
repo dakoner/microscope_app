@@ -8,9 +8,10 @@ ScanConfigPanel::ScanConfigPanel(QWidget *parent)
 {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(0);
+    layout->setSpacing(4);
 
-    m_scanAreaLabel = new QLabel("Scan Area: (select area on mosaic)");
+    m_scanAreaLabel = new QLabel("Scan Area: (Shift+drag on mosaic to select; drag/edges to edit)");
+    m_scanAreaLabel->setWordWrap(true);
     layout->addWidget(m_scanAreaLabel);
 
     // Scan style

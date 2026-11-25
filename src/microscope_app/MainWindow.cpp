@@ -752,6 +752,24 @@ MainWindow::MainWindow(QWidget *parent)
     }
     ui->hardwareTabs->addTab(m_waypointPanel, "Waypoints");
 
+    // Mosaic Scan configuration panel: always visible in the left-hand tool column
+    // rather than embedded inside the Mosaic tab.
+    auto *scanGroup = new QGroupBox("Mosaic Scan", ui->leftScrollContents);
+    auto *scanGroupLayout = new QVBoxLayout(scanGroup);
+    scanGroupLayout->setContentsMargins(6, 6, 6, 6);
+    m_scanPanel = new ScanConfigPanel(scanGroup);
+    scanGroupLayout->addWidget(m_scanPanel);
+    connect(m_scanPanel, &ScanConfigPanel::startScanSignal, this, &MainWindow::startScan);
+    connect(m_scanPanel, &ScanConfigPanel::cancelScanSignal, this, &MainWindow::cancelScan);
+    if (ui->leftLayout) {
+        const int hwIdx = ui->leftLayout->indexOf(ui->hardwareTabs);
+        if (hwIdx >= 0) {
+            ui->leftLayout->insertWidget(hwIdx + 1, scanGroup);
+        } else {
+            ui->leftLayout->addWidget(scanGroup);
+        }
+    }
+
     m_actionSaveWaypoint = new QAction("Bookmark", this);
     m_actionSaveWaypoint->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
     m_actionSaveWaypoint->setToolTip(
@@ -3317,7 +3335,9 @@ void MainWindow::initMosaicPanel(bool forceRecreate)
         delete item;
     }
     m_mosaicPanel = nullptr;
-    m_scanPanel = nullptr;
+    if (forceRecreate && m_scanPanel) {
+        m_scanPanel->updateScanAreas({});
+    }
 
     double stageW = m_stageSettings["stage_width_mm"].toDouble();
     double stageH = m_stageSettings["stage_height_mm"].toDouble();
@@ -3340,11 +3360,6 @@ void MainWindow::initMosaicPanel(bool forceRecreate)
     }
 
     layout->addWidget(m_mosaicPanel, 1);
-
-    m_scanPanel = new ScanConfigPanel;
-    connect(m_scanPanel, &ScanConfigPanel::startScanSignal, this, &MainWindow::startScan);
-    connect(m_scanPanel, &ScanConfigPanel::cancelScanSignal, this, &MainWindow::cancelScan);
-    layout->addWidget(m_scanPanel);
 
     syncWaypointsToMosaic();
 }
