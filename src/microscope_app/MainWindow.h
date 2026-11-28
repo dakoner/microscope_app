@@ -162,6 +162,7 @@ private slots:
     void onRulerToggled(bool checked);
     void calibrateRuler();
     void autoCalibrateRuler();
+    void onRulerCalibrationChanged(double value);
     void onShowProfileToggled(bool checked);
 
     // Color Picker
@@ -477,7 +478,7 @@ private:
     // Ruler
     QLineEdit *m_editRulerLen = nullptr;
     QLabel *m_lblRulerPx = nullptr;
-    QLabel *m_lblRulerCalib = nullptr;
+    QDoubleSpinBox *m_spinRulerCalib = nullptr;
     QLabel *m_lblRulerMeas = nullptr;
     QPushButton *m_btnRulerCalibrate = nullptr;
     QPushButton *m_btnAutoRuler = nullptr;

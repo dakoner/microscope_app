@@ -329,7 +329,15 @@
                 <widget class="QLabel" name="lblRulerCalibLabel"><property name="text"><string>Calibration:</string></property></widget>
                </item>
                <item row="2" column="1">
-                <widget class="QLabel" name="m_lblRulerCalib"><property name="text"><string>N/A</string></property></widget>
+                <widget class="QDoubleSpinBox" name="m_spinRulerCalib">
+                 <property name="minimum"><double>0.000000000000000</double></property>
+                 <property name="maximum"><double>100000.000000000000000</double></property>
+                 <property name="decimals"><number>2</number></property>
+                 <property name="singleStep"><double>1.000000000000000</double></property>
+                 <property name="suffix"><string> px/mm</string></property>
+                 <property name="specialValueText"><string>N/A</string></property>
+                 <property name="keyboardTracking"><bool>false</bool></property>
+                </widget>
                </item>
                <item row="3" column="0">
                 <widget class="QLabel" name="lblRulerMeasLabel"><property name="text"><string>Measured:</string></property></widget>

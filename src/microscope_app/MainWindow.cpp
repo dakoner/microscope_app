@@ -689,7 +689,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_rightTabs = ui->m_rightTabs;
     m_editRulerLen = ui->m_editRulerLen;
     m_lblRulerPx = ui->m_lblRulerPx;
-    m_lblRulerCalib = ui->m_lblRulerCalib;
+    m_spinRulerCalib = ui->m_spinRulerCalib;
     m_lblRulerMeas = ui->m_lblRulerMeas;
     m_btnRulerCalibrate = ui->m_btnRulerCalibrate;
     m_btnAutoRuler = ui->m_btnAutoRuler;
@@ -1056,6 +1056,8 @@ void MainWindow::connectSignals()
     // Ruler
     connect(m_btnRulerCalibrate, &QPushButton::clicked, this, &MainWindow::calibrateRuler);
     connect(m_btnAutoRuler, &QPushButton::clicked, this, &MainWindow::autoCalibrateRuler);
+    connect(m_spinRulerCalib, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &MainWindow::onRulerCalibrationChanged);
     connect(m_chkShowProfile, &QCheckBox::toggled, this, &MainWindow::onShowProfileToggled);
 
     // PiP repositioning on tab change
@@ -3198,9 +3200,55 @@ void MainWindow::calibrateRuler()
     double knownMm = m_editRulerLen->text().toDouble();
     if (knownMm <= 0.0) return;
     m_rulerCalibration = pxDist / knownMm;
-    m_lblRulerCalib->setText(QString("%1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
+    if (m_spinRulerCalib) {
+        QSignalBlocker blocker(m_spinRulerCalib);
+        m_spinRulerCalib->setValue(m_rulerCalibration);
+    }
     log(QString("Ruler Calibrated: %1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
     updateRulerStats();
+    initMosaicPanel(true);
+}
+
+void MainWindow::onRulerCalibrationChanged(double value)
+{
+    m_rulerCalibration = value > 0.0 ? value : 0.0;
+    if (m_rulerCalibration <= 0.0) {
+        if (!m_hasRulerStart) {
+            m_lblRulerPx->setText("0.0 px");
+        }
+        m_lblRulerMeas->setText("0.00 mm");
+        log("Ruler calibration cleared.");
+        return;
+    }
+
+    const double knownMm = m_editRulerLen ? m_editRulerLen->text().toDouble() : 0.0;
+    if (knownMm > 0.0) {
+        const double backCalibPx = m_rulerCalibration * knownMm;
+        m_lblRulerPx->setText(QString("%1 px").arg(backCalibPx, 0, 'f', 1));
+        m_lblRulerMeas->setText(QString("%1 mm").arg(knownMm, 0, 'f', 2));
+
+        // If a ruler line is drawn on the image, adjust its length to match the
+        // back-calibrated pixel distance along the same direction.
+        if (m_hasRulerStart && m_hasRulerEnd) {
+            QLineF line(m_rulerStart, m_rulerEnd);
+            if (line.length() >= 1.0) {
+                line.setLength(backCalibPx);
+                m_rulerEnd = line.p2();
+                refreshVideoLabel();
+                if (m_chkShowProfile && m_chkShowProfile->isChecked() && !m_currentPixmap.isNull()) {
+                    updateIntensityProfile(m_rulerStart, m_rulerEnd);
+                }
+            }
+        }
+        log(QString("Ruler calibration set: %1 px/mm (pixel distance: %2 px for %3 mm)")
+                .arg(m_rulerCalibration, 0, 'f', 2)
+                .arg(backCalibPx, 0, 'f', 1)
+                .arg(knownMm, 0, 'f', 2));
+    } else {
+        updateRulerStats();
+        log(QString("Ruler calibration set: %1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
+    }
+
     initMosaicPanel(true);
 }
 
@@ -3223,7 +3271,10 @@ void MainWindow::autoCalibrateRuler()
     }
 
     m_rulerCalibration = result.pixelsPerMm;
-    m_lblRulerCalib->setText(QString("%1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
+    if (m_spinRulerCalib) {
+        QSignalBlocker blocker(m_spinRulerCalib);
+        m_spinRulerCalib->setValue(m_rulerCalibration);
+    }
     m_lblAutorulerResult->setText(
         QString("Rotation applied: %1°  |  Peaks: %2  |  Median spacing: %3 px\n"
                 "Calibration: %4 px/mm  (%5 μm/px)")
@@ -4346,8 +4397,17 @@ void MainWindow::loadSettings()
 
         if (settings.contains("ruler_calibration")) {
             m_rulerCalibration = settings.value("ruler_calibration").toDouble();
-            if (m_rulerCalibration > 0)
-                m_lblRulerCalib->setText(QString("%1 px/mm").arg(m_rulerCalibration, 0, 'f', 2));
+            if (m_rulerCalibration > 0) {
+                if (m_spinRulerCalib) {
+                    QSignalBlocker blocker(m_spinRulerCalib);
+                    m_spinRulerCalib->setValue(m_rulerCalibration);
+                }
+                const double knownMm = m_editRulerLen ? m_editRulerLen->text().toDouble() : 0.0;
+                if (knownMm > 0.0) {
+                    m_lblRulerPx->setText(QString("%1 px").arg(m_rulerCalibration * knownMm, 0, 'f', 1));
+                    m_lblRulerMeas->setText(QString("%1 mm").arg(knownMm, 0, 'f', 2));
+                }
+            }
         }
 
         if (settings.contains("scan_scale_x_px_per_mm"))
