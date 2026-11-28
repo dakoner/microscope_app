@@ -10,7 +10,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QSaveFile>
+#include <QTimer>
 #include <QUuid>
 #include <QVBoxLayout>
 #include <cmath>
@@ -44,7 +46,7 @@ void WaypointPanel::setupUi()
     // Save current position row
     auto *saveRow = new QHBoxLayout;
     m_nameEdit = new QLineEdit;
-    m_nameEdit->setPlaceholderText(QStringLiteral("Specimen / bookmark name (optional)"));
+    m_nameEdit->setPlaceholderText(QStringLiteral("Waypoint name (optional)"));
     m_saveButton = new QPushButton(QStringLiteral("Save"));
     m_saveButton->setToolTip(QStringLiteral(
         "Save the current (X, Y, Z) stage position with a thumbnail preview from the live camera."));
@@ -65,6 +67,7 @@ void WaypointPanel::setupUi()
     m_listWidget->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_listWidget->setMinimumHeight(200);
     m_listWidget->setAlternatingRowColors(true);
+    m_listWidget->viewport()->installEventFilter(this);
     mainLayout->addWidget(m_listWidget, 1);
 
     // Bottom management bar
@@ -133,7 +136,7 @@ QString WaypointPanel::nextDefaultName() const
 {
     int index = m_waypoints.size() + 1;
     while (true) {
-        const QString candidate = QString("Specimen %1").arg(index);
+        const QString candidate = QString("Waypoint %1").arg(index);
         bool exists = false;
         for (const Waypoint &wp : m_waypoints) {
             if (wp.name.compare(candidate, Qt::CaseInsensitive) == 0) {
@@ -463,7 +466,7 @@ void WaypointPanel::rebuildList(const QString &selectId)
     for (const Waypoint &wp : m_waypoints) {
         auto *item = new QListWidgetItem(m_listWidget);
         item->setData(Qt::UserRole, wp.id);
-        item->setToolTip(QString("%1\nX: %2 mm  Y: %3 mm  Z: %4 mm\nSaved: %5")
+        item->setToolTip(QString("%1\nX: %2 mm  Y: %3 mm  Z: %4 mm\nSaved: %5\nDouble-click to go; Ctrl+Click to delete")
                              .arg(wp.name)
                              .arg(wp.xMm, 0, 'f', 3)
                              .arg(wp.yMm, 0, 'f', 3)
@@ -471,6 +474,8 @@ void WaypointPanel::rebuildList(const QString &selectId)
                              .arg(wp.createdAtIso));
 
         QWidget *row = createRowWidget(wp);
+        row->setProperty("waypoint_id", wp.id);
+        row->installEventFilter(this);
         item->setSizeHint(row->sizeHint().expandedTo(QSize(0, kDisplayThumbH + 10)));
         m_listWidget->addItem(item);
         m_listWidget->setItemWidget(item, row);
@@ -665,4 +670,34 @@ void WaypointPanel::onItemDoubleClicked(QListWidgetItem *item)
     if (!id.isEmpty()) {
         emitGoToForId(id);
     }
+}
+
+bool WaypointPanel::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event && event->type() == QEvent::MouseButtonPress) {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton && (me->modifiers() & Qt::ControlModifier)) {
+            QString wpId;
+            if (m_listWidget && watched == m_listWidget->viewport()) {
+                QListWidgetItem *item = m_listWidget->itemAt(me->position().toPoint());
+                if (item) {
+                    wpId = item->data(Qt::UserRole).toString();
+                }
+            } else if (watched && watched->property("waypoint_id").isValid()) {
+                wpId = watched->property("waypoint_id").toString();
+            }
+            if (!wpId.isEmpty()) {
+                // Defer removal out of the row widget's own event dispatch to avoid
+                // destroying the watched widget while it is still on the call stack.
+                QTimer::singleShot(0, this, [this, wpId]() {
+                    QString removedName;
+                    if (removeWaypointByIdOrName(wpId, &removedName)) {
+                        emit logSignal(QString("Waypoint deleted (Ctrl+Click): '%1'").arg(removedName));
+                    }
+                });
+                return true;
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }

@@ -49,6 +49,9 @@ public:
     bool includeZOnReturn() const;
     void setIncludeZOnReturn(bool includeZ);
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 signals:
     void saveCurrentRequested(const QString &name);
     void updateCurrentRequested(const QString &waypointId);

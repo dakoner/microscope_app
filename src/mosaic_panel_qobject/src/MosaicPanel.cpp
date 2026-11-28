@@ -62,6 +62,8 @@ MosaicPanel::MosaicPanel(double stageWidthMm, double stageHeightMm,
     connect(m_displayWidget, &MosaicWidget::clicked, this, &MosaicPanel::onMosaicClicked);
     connect(m_displayWidget, &MosaicWidget::selectionsChanged, this, &MosaicPanel::onSelectionsChanged);
     connect(m_displayWidget, &MosaicWidget::mouseMoved, this, &MosaicPanel::onMosaicMouseMoved);
+    connect(m_displayWidget, &MosaicWidget::waypointDeleteRequested,
+            this, &MosaicPanel::waypointDeleteRequested);
 }
 
 void MosaicPanel::setCncPosition(double xMm, double yMm)

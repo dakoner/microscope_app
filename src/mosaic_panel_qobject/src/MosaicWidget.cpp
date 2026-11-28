@@ -721,6 +721,37 @@ MosaicWidget::RectHit MosaicWidget::hitTestSelection(const QPointF &widgetPos) c
     return {};
 }
 
+QString MosaicWidget::hitTestWaypoint(const QPointF &widgetPos) const
+{
+    if (m_waypoints.isEmpty() || m_totalWidth <= 0) {
+        return {};
+    }
+
+    QFont labelFont = font();
+    labelFont.setPointSize(8);
+    labelFont.setBold(true);
+    const QFontMetrics fm(labelFont);
+
+    constexpr double kPinRadius = 12.0;
+    for (int i = m_waypoints.size() - 1; i >= 0; --i) {
+        const auto &wp = m_waypoints.at(i);
+        const QPointF p = imageToWidgetCoords(wp.imagePos);
+        if (std::hypot(widgetPos.x() - p.x(), widgetPos.y() - p.y()) <= kPinRadius) {
+            return wp.id;
+        }
+        if (!wp.name.isEmpty()) {
+            const int textW = fm.horizontalAdvance(wp.name);
+            const int textH = fm.height();
+            const QRectF tagRect(p.x() + 9, p.y() - textH / 2.0 - 2.0,
+                                 textW + 8, textH + 4);
+            if (tagRect.adjusted(-3, -3, 3, 3).contains(widgetPos)) {
+                return wp.id;
+            }
+        }
+    }
+    return {};
+}
+
 Qt::CursorShape MosaicWidget::cursorForHandle(RectHandle handle)
 {
     switch (handle) {
@@ -742,6 +773,14 @@ void MosaicWidget::mousePressEvent(QMouseEvent *event)
 {
     if (m_totalWidth == 0) return;
     m_lastMousePos = event->position();
+
+    if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ControlModifier)) {
+        const QString wpId = hitTestWaypoint(event->position());
+        if (!wpId.isEmpty()) {
+            emit waypointDeleteRequested(wpId);
+            return;
+        }
+    }
 
     if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ShiftModifier)) {
         m_isSelecting = true;
@@ -841,7 +880,10 @@ void MosaicWidget::mouseMoveEvent(QMouseEvent *event)
         m_selCurrentPos = event->position();
         update();
     } else {
-        if (event->modifiers() & Qt::ShiftModifier) {
+        if ((event->modifiers() & Qt::ControlModifier) &&
+            !hitTestWaypoint(event->position()).isEmpty()) {
+            setCursor(Qt::PointingHandCursor);
+        } else if (event->modifiers() & Qt::ShiftModifier) {
             setCursor(Qt::CrossCursor);
         } else {
             const RectHit hit = hitTestSelection(event->position());

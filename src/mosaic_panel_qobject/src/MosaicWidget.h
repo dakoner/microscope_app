@@ -48,6 +48,7 @@ signals:
     void selectionsChanged(const QVector<QRectF> &rects);
     void mouseMoved(double imgX, double imgY);
     void selectionMade(double x, double y, double w, double h);
+    void waypointDeleteRequested(const QString &waypointId);
     void toggleViewRequested();
 
 protected:
@@ -85,6 +86,7 @@ private:
     void drawAxes(QPainter &painter);
     void drawSelectionHandles(QPainter &painter);
     RectHit hitTestSelection(const QPointF &widgetPos) const;
+    QString hitTestWaypoint(const QPointF &widgetPos) const;
     static Qt::CursorShape cursorForHandle(RectHandle handle);
 
     QMap<QPair<int,int>, QImage> m_tiles;

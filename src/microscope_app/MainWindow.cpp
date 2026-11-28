@@ -773,7 +773,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_actionSaveWaypoint = new QAction("Bookmark", this);
     m_actionSaveWaypoint->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
     m_actionSaveWaypoint->setToolTip(
-        "Save current (X, Y, Z) stage position as a specimen bookmark (Ctrl+B)");
+        "Save current (X, Y, Z) stage position as a waypoint (Ctrl+B)");
     if (ui->menuFile) {
         ui->menuFile->addAction(m_actionSaveWaypoint);
     }
@@ -3351,6 +3351,17 @@ void MainWindow::initMosaicPanel(bool forceRecreate)
                 m_scanPanel->updateScanAreas(areas);
                 if (areas.isEmpty())
                     log("Scan areas cleared.");
+            });
+    connect(m_mosaicPanel, &MosaicPanel::waypointDeleteRequested, this,
+            [this](const QString &waypointId) {
+                if (!m_waypointPanel)
+                    return;
+                QString removedName;
+                if (m_waypointPanel->removeWaypointByIdOrName(waypointId, &removedName)) {
+                    const QString msg = QString("Waypoint deleted (Ctrl+Click): '%1'").arg(removedName);
+                    log(msg);
+                    statusBar()->showMessage(msg, 3000);
+                }
             });
     if (m_mosaicPanel->displayWidget()) {
         m_mosaicPanel->displayWidget()->installEventFilter(this);
