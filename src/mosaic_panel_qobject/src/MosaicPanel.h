@@ -45,6 +45,7 @@ signals:
     void requestScan(double xMin, double yMin, double xMax, double yMax);
     void selectionsChanged(const QVector<QRectF> &mmRects);
     void waypointDeleteRequested(const QString &waypointId);
+    void cursorMoved(double imgX, double imgY, double mmX, double mmY, bool inBounds);
 
 private slots:
     void onMosaicClicked(double imgX, double imgY);

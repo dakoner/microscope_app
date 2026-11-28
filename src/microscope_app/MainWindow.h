@@ -222,6 +222,9 @@ private:
     void updateSliderFromTime(double current, double minVal, double maxVal);
     void refreshVideoLabel();
     void updateFrameStatsLabel();
+    void updateCameraCursorStatus(const QPointF &imagePos);
+    void updateMosaicCursorStatus(double imgX, double imgY, double mmX, double mmY, bool inBounds);
+    void clearCursorStatus();
     QPointF getImageCoords(const QPointF &mousePos);
     void centerStageOnImagePoint(const QPointF &imagePos);
     void updateRulerStats();
@@ -421,6 +424,7 @@ private:
     QLabel *m_mosaicPipLabel = nullptr; // PiP in video tab
 
     // Status bar
+    QLabel *m_cursorCoordsLabel = nullptr;
     QLabel *m_fpsLabel = nullptr;
     QLabel *m_framesReceivedLabel = nullptr;
     QLabel *m_framesMosaicLabel = nullptr;

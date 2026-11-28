@@ -294,11 +294,16 @@ void MosaicPanel::onSelectionsChanged(const QVector<QRectF> &qrectfList)
 
 void MosaicPanel::onMosaicMouseMoved(double imgX, double imgY)
 {
-    if (m_calibrationPxPerMm > 0 && m_cursorLabel) {
+    if (m_calibrationPxPerMm > 0) {
+        const bool inBounds = (imgX >= 0.0 && imgX <= m_mosaicWidthPx &&
+                               imgY >= 0.0 && imgY <= m_mosaicHeightPx);
         double mmX = imgX / (m_calibrationPxPerMm * SCALE_FACTOR);
         double mmY = imgY / (m_calibrationPxPerMm * SCALE_FACTOR);
-        m_cursorLabel->setText(QString("Cursor: %1 mm, %2 mm")
-                                   .arg(mmX, 0, 'f', 2)
-                                   .arg(mmY, 0, 'f', 2));
+        if (m_cursorLabel) {
+            m_cursorLabel->setText(QString("Cursor: %1 mm, %2 mm")
+                                       .arg(mmX, 0, 'f', 2)
+                                       .arg(mmY, 0, 'f', 2));
+        }
+        emit cursorMoved(imgX, imgY, mmX, mmY, inBounds);
     }
 }

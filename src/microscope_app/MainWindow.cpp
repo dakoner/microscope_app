@@ -729,7 +729,10 @@ MainWindow::MainWindow(QWidget *parent)
     createPythonConsole();
     startPythonInterpreter();
 
-    // FPS label (added to status bar at runtime)
+    // Status bar labels (added at runtime)
+    m_cursorCoordsLabel = new QLabel("Cursor: --");
+    m_cursorCoordsLabel->setMinimumWidth(280);
+    statusBar()->addPermanentWidget(m_cursorCoordsLabel);
     m_fpsLabel = new QLabel("FPS: 0.0");
     statusBar()->addPermanentWidget(m_fpsLabel);
     m_framesReceivedLabel = new QLabel("Camera Frames: 0");
@@ -998,6 +1001,7 @@ void MainWindow::connectSignals()
 {
     // Refresh video label when switching back to the camera tab
     connect(m_centerTabs, &QTabWidget::currentChanged, this, [this](int) {
+        clearCursorStatus();
         if (m_centerTabs->currentWidget() == m_videoLabel && !m_currentImage.isNull()) {
             m_currentPixmap = QPixmap::fromImage(m_currentImage);
             refreshVideoLabel();
@@ -1683,17 +1687,20 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         } else if (event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress) {
             auto *me = static_cast<QMouseEvent *>(event);
             const QPointF pos = getImageCoords(me->position());
-            if (pos.x() >= 0 && pos.y() >= 0)
+            if (pos.x() >= 0 && pos.y() >= 0) {
                 updateHistogramPointer(pos);
-            else {
+                updateCameraCursorStatus(pos);
+            } else {
                 m_hasHistogramPointer = false;
                 if (m_histogramWidget)
                     m_histogramWidget->clearPointerIntensity();
+                clearCursorStatus();
             }
         } else if (event->type() == QEvent::Leave) {
             m_hasHistogramPointer = false;
             if (m_histogramWidget)
                 m_histogramWidget->clearPointerIntensity();
+            clearCursorStatus();
         }
 
         if (m_rulerActive) {
@@ -1767,6 +1774,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
             return true;
         } else if (event->type() == QEvent::FocusOut) {
             clearKeyboardJog();
+        } else if (event->type() == QEvent::Leave) {
+            clearCursorStatus();
         }
     } else if (watched == m_mosaicTabContainer && event->type() == QEvent::Resize) {
         repositionPipOverlays();
@@ -2134,6 +2143,83 @@ QPointF MainWindow::getImageCoords(const QPointF &mousePos)
         return {-1, -1};
 
     return {(mx - offX) / scale, (my - offY) / scale};
+}
+
+void MainWindow::clearCursorStatus()
+{
+    if (m_cursorCoordsLabel) {
+        m_cursorCoordsLabel->setText(QStringLiteral("Cursor: --"));
+    }
+}
+
+void MainWindow::updateCameraCursorStatus(const QPointF &imagePos)
+{
+    if (!m_cursorCoordsLabel || m_currentPixmap.isNull())
+        return;
+
+    const double scaleX = scanScaleXPxPerMm();
+    const double scaleY = scanScaleYPxPerMm();
+    const int px = static_cast<int>(std::lround(imagePos.x()));
+    const int py = static_cast<int>(std::lround(imagePos.y()));
+
+    if (scaleX <= 0.0 || scaleY <= 0.0) {
+        m_cursorCoordsLabel->setText(QString("Camera: (%1, %2) px | uncalibrated").arg(px).arg(py));
+        return;
+    }
+
+    const double du = imagePos.x() - (m_currentPixmap.width() / 2.0);
+    const double dv = imagePos.y() - (m_currentPixmap.height() / 2.0);
+    double stageDu = du;
+    double stageDv = dv;
+    const int rot = ((m_scanCameraRotationDeg % 360) + 360) % 360;
+    if (rot == 90) {
+        stageDu = -dv;
+        stageDv = du;
+    } else if (rot == 180) {
+        stageDu = -du;
+        stageDv = -dv;
+    } else if (rot == 270) {
+        stageDu = dv;
+        stageDv = -du;
+    }
+
+    const double dxMm = stageDu / scaleX;
+    const double dyMm = stageDv / scaleY;
+    if (m_hasCncPosition) {
+        const double worldX = m_currentCncXMm + dxMm;
+        const double worldY = m_currentCncYMm + dyMm;
+        m_cursorCoordsLabel->setText(
+            QString("Camera: (%1, %2) px | (%3, %4) mm")
+                .arg(px)
+                .arg(py)
+                .arg(worldX, 0, 'f', 3)
+                .arg(worldY, 0, 'f', 3));
+    } else {
+        m_cursorCoordsLabel->setText(
+            QString("Camera: (%1, %2) px | (%3%4, %5%6) mm")
+                .arg(px)
+                .arg(py)
+                .arg(dxMm >= 0 ? "+" : "")
+                .arg(dxMm, 0, 'f', 3)
+                .arg(dyMm >= 0 ? "+" : "")
+                .arg(dyMm, 0, 'f', 3));
+    }
+}
+
+void MainWindow::updateMosaicCursorStatus(double imgX, double imgY, double mmX, double mmY, bool inBounds)
+{
+    if (!m_cursorCoordsLabel)
+        return;
+    if (!inBounds) {
+        clearCursorStatus();
+        return;
+    }
+    m_cursorCoordsLabel->setText(
+        QString("Mosaic: (%1, %2) px | (%3, %4) mm")
+            .arg(static_cast<int>(std::lround(imgX)))
+            .arg(static_cast<int>(std::lround(imgY)))
+            .arg(mmX, 0, 'f', 2)
+            .arg(mmY, 0, 'f', 2));
 }
 
 void MainWindow::centerStageOnImagePoint(const QPointF &imagePos)
@@ -3363,6 +3449,8 @@ void MainWindow::initMosaicPanel(bool forceRecreate)
                     statusBar()->showMessage(msg, 3000);
                 }
             });
+    connect(m_mosaicPanel, &MosaicPanel::cursorMoved,
+            this, &MainWindow::updateMosaicCursorStatus);
     if (m_mosaicPanel->displayWidget()) {
         m_mosaicPanel->displayWidget()->installEventFilter(this);
         m_mosaicPanel->displayWidget()->setFocusPolicy(Qt::StrongFocus);
